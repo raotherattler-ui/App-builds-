@@ -1,0 +1,193 @@
+{
+  "app_name": "Herbal Bloom",
+  "personality": "8 Hand-Drawn / Journal LIGHT (Structure from 1 iOS-Native Clean)",
+  "personality_one_liner": "A grounding, earthy, and tactile wellness journey with organic hues and highly refined e-commerce usability.",
+  "color": {
+    "surface": "#FDFBF7",
+    "onSurface": "#2B2E2A",
+    "surfaceSecondary": "#F5F2EB",
+    "onSurfaceSecondary": "#3E423D",
+    "surfaceTertiary": "#EBE6DA",
+    "onSurfaceTertiary": "#4D524C",
+    "surfaceInverse": "#2B2E2A",
+    "onSurfaceInverse": "#FDFBF7",
+    "brand": "#5C715E",
+    "brandPrimary": "#5C715E",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#C2A878",
+    "onBrandSecondary": "#2B2E2A",
+    "brandTertiary": "#E2E5D9",
+    "onBrandTertiary": "#3E423D",
+    "success": "#5C715E",
+    "onSuccess": "#FFFFFF",
+    "warning": "#D99B58",
+    "onWarning": "#2B2E2A",
+    "error": "#B35A4B",
+    "onError": "#FFFFFF",
+    "info": "#869188",
+    "onInfo": "#FFFFFF",
+    "border": "#E1DFD7",
+    "borderStrong": "#CFCAC0",
+    "divider": "#EBE6DA"
+  },
+  "typography": {
+    "displayFontFamily": "Fraunces_400Regular",
+    "textFontFamily": "DMSans_400Regular",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use generous iOS-style vertical rhythms (xl/2xl) but with softer Hand-Drawn rounded edges. Cards need 'lg' padding. CTAs must be sticky above the home indicator.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Feather",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use glassmorphism on the bottom tab bar.",
+      "Use glassmorphism or a solid surface fade on the sticky 'Add to Cart' / 'Checkout' CTA containers.",
+      "Ensure text on glass surfaces is perfectly readable."
+    ],
+    "dont's": [
+      "Do not use glass on regular list items or product cards.",
+      "Do not use glass on form inputs."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "Discover natural herbal remedies and best-sellers.",
+      "states": {
+        "loading": "Centered sage spinner on oat background.",
+        "empty": "No products available at the moment.",
+        "error": "Unable to load the catalog. Tap to retry."
+      },
+      "layout": "Edge-to-edge scroll. Top hero banner with full-bleed image and top-to-bottom gradient scrim (transparent to ≥70% surfaceInverse). Below hero, horizontally scrolling 'Categories' using rounded pill filters. Below that, a 2-column grid of 'Best Sellers' where cards use surfaceSecondary and soft padding. Keep text aligned left."
+    },
+    {
+      "name": "ProductDetail",
+      "purpose": "Educate the user on the herbal product, show reviews, and drive 'Add to Cart'.",
+      "states": {
+        "loading": "Skeleton loaders for image and text.",
+        "empty": "Product not found.",
+        "error": "Failed to load product details."
+      },
+      "layout": "Large hero image area with a soft sage tinted background (brandTertiary) and the product image centered. Large Fraunces title. A small star rating row directly under title. Sections for 'Benefits', 'Ingredients', and 'Reviews' (using clean dividers). Sticky 'Add to Cart' CTA pinned at bottom over a glassmorphism base or solid surface fade."
+    },
+    {
+      "name": "Cart",
+      "purpose": "Review selected items and proceed to payment.",
+      "states": {
+        "loading": "Spinner loading cart items.",
+        "empty": "Your cart is feeling light. Discover our natural remedies.",
+        "error": "Failed to load cart."
+      },
+      "layout": "Vertical list of items. Each item card has a small image thumbnail, title, price, and + / - quantity controls. Order summary at the bottom showing subtotal, shipping, total. Sticky 'Checkout' button at bottom."
+    },
+    {
+      "name": "Checkout",
+      "purpose": "Complete the order using Razorpay integration.",
+      "states": {
+        "loading": "Processing payment...",
+        "empty": "No items to checkout.",
+        "error": "Payment failed. Please try again."
+      },
+      "layout": "Form fields for shipping details. Read-only summary of the total amount. A large sticky 'Pay with Razorpay' CTA at the bottom. KeyboardAvoidingView is mandatory."
+    },
+    {
+      "name": "Orders",
+      "purpose": "Track past purchases and leave reviews.",
+      "states": {
+        "loading": "Loading your herbal journey...",
+        "empty": "You haven't placed any orders yet.",
+        "error": "Could not load order history."
+      },
+      "layout": "List of order cards. Each card shows date, order number, and a horizontal list of thumbnails. A 'Write a Review' secondary button visible for delivered orders."
+    },
+    {
+      "name": "Support",
+      "purpose": "Help the customer via Email or WhatsApp.",
+      "states": {
+        "loading": "Loading support options...",
+        "empty": "Support is currently unavailable.",
+        "error": "Error loading support."
+      },
+      "layout": "Simple centered layout. A calm illustration or large soft icon at the top. Two large buttons: 'Email Support' and 'WhatsApp Support' (use brand colors, do not use jarring native green)."
+    },
+    {
+      "name": "Profile",
+      "purpose": "Manage account and preferences.",
+      "states": {
+        "loading": "Loading profile...",
+        "empty": "Please log in to view profile.",
+        "error": "Failed to load profile."
+      },
+      "layout": "Clean list view. Avatar (initials). Rows for 'My Orders', 'Payment Methods', 'Settings', and 'Logout'. Use Feather icons in tinted brandTertiary squares for each row."
+    },
+    {
+      "name": "Auth",
+      "purpose": "Sign in or register for the app.",
+      "states": {
+        "loading": "Authenticating...",
+        "empty": "N/A",
+        "error": "Authentication failed."
+      },
+      "layout": "Centered layout. Soft background gradient. Large Fraunces welcome title. Single 'Continue with Google' button. No heavy forms."
+    }
+  ],
+  "images": {
+    "home_hero": {
+      "url": "https://images.pexels.com/photos/30946766/pexels-photo-30946766.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Elegant floral tea setup with tulips and sunlight"
+    },
+    "product_ashwagandha": {
+      "url": "https://images.unsplash.com/photo-1734607404574-df50e1839d6d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTV8MHwxfHNlYXJjaHwxfHxhc2h3YWdhbmRoYSUyMGNhcHN1bGVzJTIwYm90dGxlfGVufDB8fHx8MTc4MjA5OTkzMXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Ashwagandha capsules bottle on natural background"
+    },
+    "product_herbal_tea": {
+      "url": "https://images.unsplash.com/photo-1571934811356-5cc061b6821f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2ODl8MHwxfHNlYXJjaHwxfHxoZXJiYWwlMjB0ZWElMjBpbmdyZWRpZW50c3xlbnwwfHx8fDE3ODIwOTk5MzF8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Herbal tea ingredients in ceramic mug"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Use the Hand-Drawn / Journal LIGHT personality. Colors must be earthy (Sage, Ochre, Oat) and utterly avoid any shade of blue, purple, or indigo.",
+    "Do not use heavy shadows. Use border dividers or surface color changes (surface vs surfaceSecondary) to establish hierarchy.",
+    "Typography must be strictly capped at 500 weight. Use Fraunces for headings to give an editorial/handcrafted feel, and DM Sans for clean e-commerce body readability.",
+    "Sticky primary actions (like Add to Cart, Checkout, Pay) must rest cleanly at the bottom of the screen with proper safe area padding, and content must scroll behind them.",
+    "All images used as full-bleed backgrounds MUST have a top-to-bottom gradient scrim (transparent to surfaceInverse) to guarantee text contrast. Text placed over images should be at the bottom 30% where the scrim is darkest.",
+    "In the Support screen, DO NOT use native WhatsApp green (#25D366). Stick to the app's brand colors (brand or brandSecondary) to maintain the organic aesthetic.",
+    "Icons should be 'Feather' - clean, line-art style. Do not mix filled and outlined icons.",
+    "Include the required states (loading, empty, error) using full screen flex:1 layouts for every data screen."
+  ]
+}
