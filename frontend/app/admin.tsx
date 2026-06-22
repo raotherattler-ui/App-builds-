@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator,
   TextInput, KeyboardAvoidingView, Platform,
@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
+import { router } from "expo-router";
 import { api } from "@/src/lib/api";
 import { useAuth } from "@/src/lib/AuthContext";
 import { theme } from "@/src/theme";
@@ -49,7 +49,7 @@ export default function AdminScreen() {
     setLoading(false);
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useEffect(() => { load(); }, [load]);
 
   if (!user?.is_admin) {
     return (
@@ -175,7 +175,10 @@ export default function AdminScreen() {
               value={supportEmail}
               onChangeText={setSupportEmail}
               autoCapitalize="none"
+              autoCorrect={false}
+              editable
               keyboardType="email-address"
+              placeholder="support@yourbrand.com"
               style={styles.input}
               placeholderTextColor={theme.colors.mutedText}
             />
@@ -184,7 +187,11 @@ export default function AdminScreen() {
               testID="admin-support-whatsapp"
               value={supportWA}
               onChangeText={setSupportWA}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable
               keyboardType="phone-pad"
+              placeholder="+919876543210"
               style={styles.input}
               placeholderTextColor={theme.colors.mutedText}
             />
