@@ -648,6 +648,44 @@ async def admin_delete_category(name: str, authorization: Optional[str] = Header
     return {"ok": True, "categories": lst}
 
 
+# ---------- Admin: Admins Management ----------
+class PromoteAdminRequest(BaseModel):
+    email: str
+
+
+@api_router.get("/admin/admins")
+async def admin_list_admins(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    docs = await db.users.find({"is_admin": True}, {"_id": 0, "user_id": 1, "email": 1, "name": 1, "picture": 1}).to_list(50)
+    return {"admins": docs}
+
+
+@api_router.post("/admin/admins")
+async def admin_promote(req: PromoteAdminRequest, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    email = req.email.strip().lower()
+    if not email:
+        raise HTTPException(400, "Empty email")
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user:
+        raise HTTPException(404, "No user with that email. They must sign in once before being promoted.")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"is_admin": True}})
+    return {"ok": True}
+
+
+@api_router.delete("/admin/admins/{user_id}")
+async def admin_revoke(user_id: str, authorization: Optional[str] = Header(None)):
+    current = await require_admin(authorization)
+    if current["user_id"] == user_id:
+        raise HTTPException(400, "You cannot remove your own admin role")
+    # Prevent removing the last remaining admin
+    count = await db.users.count_documents({"is_admin": True})
+    if count <= 1:
+        raise HTTPException(400, "At least one admin must remain")
+    await db.users.update_one({"user_id": user_id}, {"$set": {"is_admin": False}})
+    return {"ok": True}
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Herbal Bloom API"}

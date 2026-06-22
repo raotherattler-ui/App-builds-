@@ -5,7 +5,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { Feather, FontAwesome } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { api } from "@/src/lib/api";
 import { theme } from "@/src/theme";
@@ -41,9 +41,11 @@ export default function Home() {
 
   useEffect(() => { load(cat); }, [cat, load]);
 
-  useEffect(() => {
-    api<{ whatsapp_link: string }>("/support/info").then((r) => setWaLink(r.whatsapp_link)).catch(() => {});
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      api<{ whatsapp_link: string }>("/support/info").then((r) => setWaLink(r.whatsapp_link)).catch(() => {});
+    }, []),
+  );
 
   const Header = (
     <View>

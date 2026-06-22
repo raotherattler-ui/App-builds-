@@ -1,19 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, Linking, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { api } from "@/src/lib/api";
 import { theme } from "@/src/theme";
 
 export default function Support() {
   const [info, setInfo] = useState<{ email: string; whatsapp: string; whatsapp_link: string } | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api<{ email: string; whatsapp: string; whatsapp_link: string }>("/support/info")
       .then(setInfo)
       .catch(() => {});
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   if (!info) return (
     <SafeAreaView style={styles.root}>

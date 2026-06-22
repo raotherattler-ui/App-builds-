@@ -16,10 +16,15 @@ type Product = {
   image: string; category: string; benefits: string[]; ingredients: string[]; in_stock: boolean;
 };
 
+type AdminUser = { user_id: string; email: string; name: string; picture?: string };
+
 export default function AdminScreen() {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [adminMsg, setAdminMsg] = useState("");
   const [newCat, setNewCat] = useState("");
   const [editingCat, setEditingCat] = useState<{ old: string; val: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,15 +35,17 @@ export default function AdminScreen() {
   const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
-    const [pr, s, c] = await Promise.all([
+    const [pr, s, c, a] = await Promise.all([
       api<{ products: Product[] }>("/products"),
       api<{ email: string; whatsapp: string }>("/support/info"),
       api<{ categories: string[] }>("/admin/categories", { auth: true }).catch(() => ({ categories: [] })),
+      api<{ admins: AdminUser[] }>("/admin/admins", { auth: true }).catch(() => ({ admins: [] })),
     ]);
     setProducts(pr.products);
     setSupportEmail(s.email);
     setSupportWA(s.whatsapp);
     setCategories(c.categories);
+    setAdmins(a.admins);
     setLoading(false);
   }, []);
 
@@ -60,12 +67,50 @@ export default function AdminScreen() {
 
   const saveSupport = async () => {
     setSavingSupport(true);
+    setMsg("");
     try {
-      await api("/admin/support", { method: "PUT", auth: true, body: { email: supportEmail, whatsapp: supportWA } });
-      setMsg("Support details saved.");
-      setTimeout(() => setMsg(""), 2000);
-    } catch (e: any) { setMsg(e?.message ?? "Failed"); }
-    finally { setSavingSupport(false); }
+      await api("/admin/support", {
+        method: "PUT",
+        auth: true,
+        body: { email: supportEmail.trim(), whatsapp: supportWA.trim() },
+      });
+      // Re-fetch to confirm what's actually stored on the server
+      const fresh = await api<{ email: string; whatsapp: string }>("/support/info");
+      setSupportEmail(fresh.email);
+      setSupportWA(fresh.whatsapp);
+      setMsg(`Saved! Email: ${fresh.email}`);
+      setTimeout(() => setMsg(""), 3000);
+    } catch (e: any) {
+      setMsg(e?.message ?? "Failed to save");
+    } finally {
+      setSavingSupport(false);
+    }
+  };
+
+  const addAdmin = async () => {
+    const e = newAdminEmail.trim().toLowerCase();
+    if (!e) return;
+    setAdminMsg("");
+    try {
+      await api("/admin/admins", { method: "POST", auth: true, body: { email: e } });
+      setNewAdminEmail("");
+      setAdminMsg(`Promoted ${e}`);
+      setTimeout(() => setAdminMsg(""), 3000);
+      const a = await api<{ admins: AdminUser[] }>("/admin/admins", { auth: true });
+      setAdmins(a.admins);
+    } catch (err: any) {
+      setAdminMsg(err?.message?.split(":").slice(1).join(":").trim() || "Failed");
+    }
+  };
+
+  const removeAdmin = async (uid: string) => {
+    try {
+      await api(`/admin/admins/${uid}`, { method: "DELETE", auth: true });
+      const a = await api<{ admins: AdminUser[] }>("/admin/admins", { auth: true });
+      setAdmins(a.admins);
+    } catch (err: any) {
+      setAdminMsg(err?.message?.split(":").slice(1).join(":").trim() || "Failed");
+    }
   };
 
   const deleteProduct = async (id: string) => {
@@ -146,7 +191,49 @@ export default function AdminScreen() {
             <Pressable testID="save-support" onPress={saveSupport} disabled={savingSupport} style={styles.cta}>
               {savingSupport ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save Support Info</Text>}
             </Pressable>
-            {msg ? <Text style={[styles.msg, msg.includes("saved") && { color: theme.colors.brand }]}>{msg}</Text> : null}
+            {msg ? <Text style={[styles.msg, msg.includes("Saved") && { color: theme.colors.brand }]}>{msg}</Text> : null}
+          </View>
+
+          <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>Admins ({admins.length})</Text>
+          <View style={styles.card}>
+            {admins.map((a) => (
+              <View key={a.user_id} style={styles.catRow} testID={`admin-user-${a.user_id}`}>
+                <View style={styles.adminAvatar}>
+                  <Text style={styles.adminAvatarText}>{a.name?.[0]?.toUpperCase() ?? "A"}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.adminName} numberOfLines={1}>{a.name}{a.user_id === user?.user_id ? "  (you)" : ""}</Text>
+                  <Text style={styles.adminEmail} numberOfLines={1}>{a.email}</Text>
+                </View>
+                {a.user_id !== user?.user_id && admins.length > 1 ? (
+                  <Pressable
+                    testID={`remove-admin-${a.user_id}`}
+                    onPress={() => removeAdmin(a.user_id)}
+                    style={styles.catBtn}
+                  >
+                    <Feather name="user-minus" size={14} color={theme.colors.error} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+            <View style={[styles.catRow, { borderBottomWidth: 0, paddingTop: 8 }]}>
+              <TextInput
+                testID="new-admin-email"
+                value={newAdminEmail}
+                onChangeText={setNewAdminEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholder="someone@gmail.com"
+                placeholderTextColor={theme.colors.mutedText}
+                style={[styles.input, { flex: 1, paddingVertical: 8 }]}
+              />
+              <Pressable testID="add-admin-btn" onPress={addAdmin} style={[styles.addBtn, { paddingVertical: 8 }]}>
+                <Feather name="user-plus" size={14} color="#fff" />
+                <Text style={styles.addBtnText}>Promote</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.hint}>The user must sign in once with Google before you can promote them.</Text>
+            {adminMsg ? <Text style={[styles.msg, adminMsg.includes("Promoted") && { color: theme.colors.brand }]}>{adminMsg}</Text> : null}
           </View>
 
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: theme.spacing.lg }}>
@@ -361,4 +448,12 @@ const styles = StyleSheet.create({
     width: 30, height: 30, borderRadius: 8, backgroundColor: theme.colors.surface,
     alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.border,
   },
+  adminAvatar: {
+    width: 36, height: 36, borderRadius: 999, backgroundColor: theme.colors.brand,
+    alignItems: "center", justifyContent: "center",
+  },
+  adminAvatarText: { color: "#fff", fontFamily: theme.font.display, fontSize: 14 },
+  adminName: { color: theme.colors.onSurface, fontFamily: theme.font.text, fontSize: 14 },
+  adminEmail: { color: theme.colors.mutedText, fontFamily: theme.font.text, fontSize: 12 },
+  hint: { fontSize: 11, color: theme.colors.mutedText, fontFamily: theme.font.text, marginTop: 6 },
 });
