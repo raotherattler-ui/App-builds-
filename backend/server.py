@@ -210,6 +210,10 @@ async def list_products(category: Optional[str] = None):
 
 @api_router.get("/products/categories")
 async def categories():
+    # Admin-managed list, fallback to distinct from products
+    s = await db.settings.find_one({"key": "categories"}, {"_id": 0})
+    if s and isinstance(s.get("list"), list) and s["list"]:
+        return {"categories": ["All"] + s["list"]}
     cats = await db.products.distinct("category")
     return {"categories": ["All"] + sorted(cats)}
 
@@ -570,6 +574,80 @@ async def admin_delete_product(product_id: str, authorization: Optional[str] = H
     return {"ok": True}
 
 
+# ---------- Admin: Categories ----------
+class CategoryAddRequest(BaseModel):
+    name: str
+
+
+class CategoryRenameRequest(BaseModel):
+    old_name: str
+    new_name: str
+
+
+async def _get_categories_list() -> List[str]:
+    s = await db.settings.find_one({"key": "categories"}, {"_id": 0})
+    if s and isinstance(s.get("list"), list):
+        return s["list"]
+    return sorted(await db.products.distinct("category"))
+
+
+async def _set_categories_list(lst: List[str]):
+    await db.settings.update_one(
+        {"key": "categories"},
+        {"$set": {"key": "categories", "list": lst}},
+        upsert=True,
+    )
+
+
+@api_router.get("/admin/categories")
+async def admin_list_categories(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    return {"categories": await _get_categories_list()}
+
+
+@api_router.post("/admin/categories")
+async def admin_add_category(req: CategoryAddRequest, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(400, "Empty name")
+    lst = await _get_categories_list()
+    if name not in lst:
+        lst.append(name)
+    await _set_categories_list(lst)
+    return {"ok": True, "categories": lst}
+
+
+@api_router.put("/admin/categories")
+async def admin_rename_category(req: CategoryRenameRequest, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    new_name = req.new_name.strip()
+    if not new_name:
+        raise HTTPException(400, "Empty name")
+    lst = await _get_categories_list()
+    lst = [new_name if c == req.old_name else c for c in lst]
+    # de-dup while preserving order
+    seen: set = set()
+    out: List[str] = []
+    for c in lst:
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+    await _set_categories_list(out)
+    # cascade rename on products
+    await db.products.update_many({"category": req.old_name}, {"$set": {"category": new_name}})
+    return {"ok": True, "categories": out}
+
+
+@api_router.delete("/admin/categories/{name}")
+async def admin_delete_category(name: str, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    lst = await _get_categories_list()
+    lst = [c for c in lst if c != name]
+    await _set_categories_list(lst)
+    return {"ok": True, "categories": lst}
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Herbal Bloom API"}
@@ -680,6 +758,15 @@ async def on_startup():
     # seed
     for p in SAMPLE_PRODUCTS:
         await db.products.update_one({"id": p["id"]}, {"$set": p}, upsert=True)
+    # seed categories list from distinct if not already set
+    existing = await db.settings.find_one({"key": "categories"})
+    if not existing:
+        cats = sorted(await db.products.distinct("category"))
+        await db.settings.update_one(
+            {"key": "categories"},
+            {"$set": {"key": "categories", "list": cats}},
+            upsert=True,
+        )
     logger.info("Startup complete. Products seeded.")
 
 

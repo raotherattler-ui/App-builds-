@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, FlatList, Pressable, ScrollView, ActivityIndicator, RefreshControl,
+  View, Text, StyleSheet, FlatList, Pressable, ScrollView, ActivityIndicator, RefreshControl, Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
-import { Feather } from "@expo/vector-icons";
+import { Feather, FontAwesome } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { api } from "@/src/lib/api";
@@ -21,6 +21,7 @@ export default function Home() {
   const [cat, setCat] = useState("All");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [waLink, setWaLink] = useState<string | null>(null);
 
   const load = useCallback(async (selected: string) => {
     try {
@@ -39,6 +40,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => { load(cat); }, [cat, load]);
+
+  useEffect(() => {
+    api<{ whatsapp_link: string }>("/support/info").then((r) => setWaLink(r.whatsapp_link)).catch(() => {});
+  }, []);
 
   const Header = (
     <View>
@@ -78,7 +83,7 @@ export default function Home() {
     <SafeAreaView style={styles.root} edges={["top"]} testID="home-screen">
       <View style={styles.headerBar}>
         <View>
-          <Text style={styles.brand}>AVR Organics</Text>
+          <Text style={styles.brand}>avr organics</Text>
           <Text style={styles.sub}>Nature&apos;s wisdom, delivered.</Text>
         </View>
         <Pressable testID="support-icon" onPress={() => router.push("/support")} style={styles.supportBtn}>
@@ -124,6 +129,16 @@ export default function Home() {
           )}
         />
       )}
+
+      {waLink ? (
+        <Pressable
+          testID="whatsapp-fab"
+          onPress={() => Linking.openURL(waLink)}
+          style={styles.waFab}
+        >
+          <FontAwesome name="whatsapp" size={26} color="#fff" />
+        </Pressable>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -176,4 +191,12 @@ const styles = StyleSheet.create({
   cardTag: { fontSize: 11, color: theme.colors.mutedText, fontFamily: theme.font.text },
   cardPrice: { fontSize: 14, color: theme.colors.brand, fontFamily: theme.font.text },
   cardRating: { fontSize: 12, color: theme.colors.onSurface, fontFamily: theme.font.text },
+  waFab: {
+    position: "absolute", right: 16, bottom: 20,
+    width: 54, height: 54, borderRadius: 999,
+    backgroundColor: "#25D366",
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
 });

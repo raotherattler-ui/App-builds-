@@ -17,7 +17,7 @@ export default function OrderSuccess() {
         <Text style={styles.sub}>
           {isPending
             ? "We've recorded your order. Complete payment with Razorpay once keys are live."
-            : "Thank you for shopping with AVR Organics. Your herbal goodness is on the way."}
+            : "Thank you for shopping with avr organics. Your herbal goodness is on the way."}
         </Text>
         <Text style={styles.oid}>Order #{id?.slice(-8)?.toUpperCase()}</Text>
         <Pressable

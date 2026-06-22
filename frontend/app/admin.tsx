@@ -19,6 +19,9 @@ type Product = {
 export default function AdminScreen() {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [newCat, setNewCat] = useState("");
+  const [editingCat, setEditingCat] = useState<{ old: string; val: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Product | null>(null);
   const [supportEmail, setSupportEmail] = useState("");
@@ -27,13 +30,15 @@ export default function AdminScreen() {
   const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
-    const [pr, s] = await Promise.all([
+    const [pr, s, c] = await Promise.all([
       api<{ products: Product[] }>("/products"),
       api<{ email: string; whatsapp: string }>("/support/info"),
+      api<{ categories: string[] }>("/admin/categories", { auth: true }).catch(() => ({ categories: [] })),
     ]);
     setProducts(pr.products);
     setSupportEmail(s.email);
     setSupportWA(s.whatsapp);
+    setCategories(c.categories);
     setLoading(false);
   }, []);
 
@@ -66,6 +71,32 @@ export default function AdminScreen() {
   const deleteProduct = async (id: string) => {
     await api(`/admin/products/${id}`, { method: "DELETE", auth: true });
     load();
+  };
+
+  const addCategory = async () => {
+    const n = newCat.trim();
+    if (!n) return;
+    const r = await api<{ categories: string[] }>("/admin/categories", { method: "POST", auth: true, body: { name: n } });
+    setCategories(r.categories);
+    setNewCat("");
+  };
+
+  const renameCategory = async () => {
+    if (!editingCat) return;
+    const r = await api<{ categories: string[] }>("/admin/categories", {
+      method: "PUT", auth: true,
+      body: { old_name: editingCat.old, new_name: editingCat.val.trim() },
+    });
+    setCategories(r.categories);
+    setEditingCat(null);
+    load();
+  };
+
+  const deleteCategory = async (name: string) => {
+    const r = await api<{ categories: string[] }>(`/admin/categories/${encodeURIComponent(name)}`, {
+      method: "DELETE", auth: true,
+    });
+    setCategories(r.categories);
   };
 
   if (editing) {
@@ -116,6 +147,64 @@ export default function AdminScreen() {
               {savingSupport ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save Support Info</Text>}
             </Pressable>
             {msg ? <Text style={[styles.msg, msg.includes("saved") && { color: theme.colors.brand }]}>{msg}</Text> : null}
+          </View>
+
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: theme.spacing.lg }}>
+            <Text style={styles.section}>Categories ({categories.length})</Text>
+          </View>
+          <View style={styles.card}>
+            {categories.map((c) => (
+              <View key={c} style={styles.catRow} testID={`admin-cat-${c}`}>
+                {editingCat?.old === c ? (
+                  <>
+                    <TextInput
+                      testID={`cat-edit-${c}`}
+                      value={editingCat.val}
+                      onChangeText={(v) => setEditingCat({ old: c, val: v })}
+                      style={[styles.input, { flex: 1, paddingVertical: 8 }]}
+                    />
+                    <Pressable testID={`cat-save-${c}`} onPress={renameCategory} style={styles.catBtn}>
+                      <Feather name="check" size={14} color={theme.colors.brand} />
+                    </Pressable>
+                    <Pressable onPress={() => setEditingCat(null)} style={styles.catBtn}>
+                      <Feather name="x" size={14} color={theme.colors.mutedText} />
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.catName}>{c}</Text>
+                    <Pressable
+                      testID={`cat-edit-btn-${c}`}
+                      onPress={() => setEditingCat({ old: c, val: c })}
+                      style={styles.catBtn}
+                    >
+                      <Feather name="edit-2" size={14} color={theme.colors.brand} />
+                    </Pressable>
+                    <Pressable
+                      testID={`cat-del-${c}`}
+                      onPress={() => deleteCategory(c)}
+                      style={styles.catBtn}
+                    >
+                      <Feather name="trash-2" size={14} color={theme.colors.error} />
+                    </Pressable>
+                  </>
+                )}
+              </View>
+            ))}
+            <View style={[styles.catRow, { borderBottomWidth: 0, paddingTop: 8 }]}>
+              <TextInput
+                testID="new-category-input"
+                value={newCat}
+                onChangeText={setNewCat}
+                placeholder="New category (e.g. Honey)"
+                placeholderTextColor={theme.colors.mutedText}
+                style={[styles.input, { flex: 1, paddingVertical: 8 }]}
+              />
+              <Pressable testID="add-category-btn" onPress={addCategory} style={[styles.addBtn, { paddingVertical: 8 }]}>
+                <Feather name="plus" size={14} color="#fff" />
+                <Text style={styles.addBtnText}>Add</Text>
+              </Pressable>
+            </View>
           </View>
 
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: theme.spacing.lg }}>
@@ -261,6 +350,15 @@ const styles = StyleSheet.create({
   pTag: { fontSize: 12, color: theme.colors.mutedText, fontFamily: theme.font.text },
   pBtn: {
     width: 34, height: 34, borderRadius: 8, backgroundColor: theme.colors.surface,
+    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.border,
+  },
+  catRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.divider,
+  },
+  catName: { flex: 1, color: theme.colors.onSurface, fontFamily: theme.font.text, fontSize: 14 },
+  catBtn: {
+    width: 30, height: 30, borderRadius: 8, backgroundColor: theme.colors.surface,
     alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.border,
   },
 });

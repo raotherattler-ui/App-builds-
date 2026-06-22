@@ -40,7 +40,7 @@ export default function Support() {
 
         <Pressable
           testID="email-support-button"
-          onPress={() => Linking.openURL(`mailto:${info.email}?subject=AVR%20Organics%20Support`)}
+          onPress={() => Linking.openURL(`mailto:${info.email}?subject=avr%20organics%20Support`)}
           style={styles.btn}
         >
           <Feather name="mail" size={18} color="#fff" />

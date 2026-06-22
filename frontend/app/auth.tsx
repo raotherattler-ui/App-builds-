@@ -36,7 +36,7 @@ export default function AuthScreen() {
           <View style={styles.logoBadge}>
             <Feather name="feather" size={22} color={theme.colors.onBrandPrimary} />
           </View>
-          <Text style={styles.brand}>AVR Organics</Text>
+          <Text style={styles.brand}>avr organics</Text>
         </View>
         <View style={styles.bottom}>
           <Text style={styles.title}>Nature&apos;s wisdom, delivered.</Text>
