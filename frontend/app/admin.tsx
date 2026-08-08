@@ -38,16 +38,21 @@ export default function AdminScreen() {
   const [merchantName, setMerchantName] = useState("AVR Organics");
   const [savingMerchant, setSavingMerchant] = useState(false);
   const [merchantMsg, setMerchantMsg] = useState("");
+  const [cmbPhone, setCmbPhone] = useState("");
+  const [cmbKey, setCmbKey] = useState("");
+  const [savingCmb, setSavingCmb] = useState(false);
+  const [cmbMsg, setCmbMsg] = useState("");
   const [savingSupport, setSavingSupport] = useState(false);
   const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
-    const [pr, s, c, a, mi] = await Promise.all([
+    const [pr, s, c, a, mi, cmb] = await Promise.all([
       api<{ products: Product[] }>("/products"),
       api<{ email: string; whatsapp: string }>("/support/info"),
       api<{ categories: string[] }>("/admin/categories", { auth: true }).catch(() => ({ categories: [] })),
       api<{ admins: AdminUser[] }>("/admin/admins", { auth: true }).catch(() => ({ admins: [] })),
       api<{ merchant_vpa: string; merchant_name: string }>("/support/info").catch(() => ({ merchant_vpa: "", merchant_name: "" })),
+      api<{ phone: string; apikey: string }>("/admin/callmebot", { auth: true }).catch(() => ({ phone: "", apikey: "" })),
     ]);
     setProducts(pr.products);
     setSupportEmail(s.email);
@@ -56,6 +61,8 @@ export default function AdminScreen() {
     setAdmins(a.admins);
     setMerchantVpa(mi.merchant_vpa || "");
     setMerchantName(mi.merchant_name || "AVR Organics");
+    setCmbPhone(cmb.phone || "");
+    setCmbKey(cmb.apikey || "");
     setLoading(false);
   }, []);
 
@@ -141,6 +148,27 @@ export default function AdminScreen() {
       });
       setProducts((prev) => prev.map((p) => p.id === pid ? { ...p, in_stock: !currentInStock } : p));
     } catch (e) { console.warn(e); }
+  };
+
+  const saveCallMeBot = async () => {
+    setSavingCmb(true); setCmbMsg("");
+    try {
+      await api("/admin/callmebot", { method: "PUT", auth: true, body: { phone: cmbPhone.trim(), apikey: cmbKey.trim() } });
+      setCmbMsg("Saved.");
+      setTimeout(() => setCmbMsg(""), 2500);
+    } catch (e: any) {
+      setCmbMsg(e?.message ?? "Failed");
+    } finally { setSavingCmb(false); }
+  };
+
+  const testCallMeBot = async () => {
+    setCmbMsg("Sending test...");
+    try {
+      const r = await api<{ sent: boolean; reason?: string }>("/admin/callmebot/test", { method: "POST", auth: true });
+      setCmbMsg(r.sent ? "Test sent! Check your WhatsApp." : `Failed: ${r.reason ?? "unknown"}`);
+    } catch (e: any) {
+      setCmbMsg(e?.message ?? "Failed");
+    }
   };
 
   const deleteProduct = async (id: string) => {
@@ -261,6 +289,59 @@ export default function AdminScreen() {
             </Pressable>
             {merchantMsg ? <Text style={[styles.msg, merchantMsg.includes("Saved") && { color: theme.colors.brand }]}>{merchantMsg}</Text> : null}
             <Text style={styles.hint}>Customers will pay directly to this UPI ID via GPay / PhonePe / Paytm / any UPI app.</Text>
+          </View>
+
+          <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>WhatsApp Order Alerts</Text>
+          <View style={styles.card}>
+            <Text style={styles.hint}>
+              To get automatic WhatsApp alerts on every new order:{"\n"}
+              1. Add +34 644 51 95 23 to your contacts as &quot;CallMeBot&quot;.{"\n"}
+              2. Send that number this exact message on WhatsApp: I allow callmebot to send me messages{"\n"}
+              3. Wait for the reply — it contains your personal APIKEY.{"\n"}
+              4. Paste your phone and APIKEY below and tap Save, then Test.
+            </Text>
+            <Text style={styles.label}>Your WhatsApp Number</Text>
+            <TextInput
+              testID="admin-cmb-phone"
+              value={cmbPhone}
+              onChangeText={setCmbPhone}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable
+              keyboardType="phone-pad"
+              placeholder="+917200187488"
+              style={styles.input}
+              placeholderTextColor={theme.colors.mutedText}
+            />
+            <Text style={styles.label}>CallMeBot API Key</Text>
+            <TextInput
+              testID="admin-cmb-apikey"
+              value={cmbKey}
+              onChangeText={setCmbKey}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable
+              placeholder="e.g. 1234567"
+              style={styles.input}
+              placeholderTextColor={theme.colors.mutedText}
+            />
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable testID="save-cmb" onPress={saveCallMeBot} disabled={savingCmb} style={[styles.cta, { flex: 1 }]}>
+                {savingCmb ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save</Text>}
+              </Pressable>
+              <Pressable
+                testID="test-cmb"
+                onPress={testCallMeBot}
+                style={[styles.cta, { flex: 1, backgroundColor: theme.colors.brandSecondary }]}
+              >
+                <Text style={[styles.ctaText, { color: theme.colors.onBrandSecondary }]}>Send Test</Text>
+              </Pressable>
+            </View>
+            {cmbMsg ? (
+              <Text style={[styles.msg, (cmbMsg.includes("Saved") || cmbMsg.includes("sent")) && { color: theme.colors.brand }]}>
+                {cmbMsg}
+              </Text>
+            ) : null}
           </View>
 
           <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>Admins ({admins.length})</Text>

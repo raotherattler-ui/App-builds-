@@ -373,6 +373,25 @@ async def create_order(req: OrderCreateRequest, authorization: Optional[str] = H
         "created_at": datetime.now(timezone.utc),
     }
     await db.orders.insert_one(doc)
+
+    # Best-effort WhatsApp alert to admin (via CallMeBot if configured)
+    try:
+        oid_short = order_id[-8:].upper()
+        item_lines = "\n".join(f"- {it['name']} x{it['quantity']}" for it in items[:5])
+        more = f"\n+{len(items) - 5} more" if len(items) > 5 else ""
+        alert_text = (
+            f"NEW ORDER #{oid_short}\n"
+            f"{user.get('name','Customer')} ({user.get('email','')})\n"
+            f"Total: ₹{total:.2f} · {req.payment_method.upper()}\n"
+            f"{item_lines}{more}\n"
+            f"Deliver to: {req.address.full_name}, {req.address.city} - {req.address.pincode}\n"
+            f"Phone: {req.address.phone}"
+        )
+        import asyncio as _asyncio
+        _asyncio.create_task(send_whatsapp_alert(alert_text))
+    except Exception as _e:
+        logger.warning(f"whatsapp alert schedule failed: {_e}")
+
     return {
         "order_id": order_id,
         "razorpay_order_id": rzp_order_id,
@@ -532,6 +551,32 @@ async def get_merchant_settings() -> dict:
     }
 
 
+async def get_callmebot_settings() -> dict:
+    s = await db.settings.find_one({"key": "callmebot"}, {"_id": 0})
+    return {
+        "phone": (s or {}).get("phone", ""),
+        "apikey": (s or {}).get("apikey", ""),
+    }
+
+
+async def send_whatsapp_alert(text: str) -> dict:
+    """Best-effort CallMeBot WhatsApp alert. Returns status dict; never raises."""
+    cfg = await get_callmebot_settings()
+    if not cfg["phone"] or not cfg["apikey"]:
+        return {"sent": False, "reason": "CallMeBot not configured"}
+    phone = cfg["phone"].replace("+", "").replace(" ", "").replace("-", "")
+    try:
+        async with httpx.AsyncClient(timeout=10) as h:
+            r = await h.get(
+                "https://api.callmebot.com/whatsapp.php",
+                params={"phone": phone, "text": text, "apikey": cfg["apikey"]},
+            )
+        return {"sent": r.status_code == 200, "status": r.status_code}
+    except Exception as e:
+        logger.warning(f"CallMeBot send failed: {e}")
+        return {"sent": False, "reason": str(e)}
+
+
 @api_router.get("/support/info")
 async def support_info():
     s = await get_support_settings()
@@ -554,6 +599,11 @@ class SupportUpdateRequest(BaseModel):
 class MerchantUpdateRequest(BaseModel):
     vpa: str
     name: str
+
+
+class CallMeBotUpdateRequest(BaseModel):
+    phone: str
+    apikey: str
 
 
 async def require_admin(authorization: Optional[str]) -> dict:
@@ -583,6 +633,33 @@ async def admin_update_merchant(req: MerchantUpdateRequest, authorization: Optio
         upsert=True,
     )
     return {"ok": True}
+
+
+@api_router.get("/admin/callmebot")
+async def admin_get_callmebot(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    cfg = await get_callmebot_settings()
+    return {"phone": cfg["phone"], "apikey_set": bool(cfg["apikey"]), "apikey": cfg["apikey"]}
+
+
+@api_router.put("/admin/callmebot")
+async def admin_update_callmebot(req: CallMeBotUpdateRequest, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    await db.settings.update_one(
+        {"key": "callmebot"},
+        {"$set": {"key": "callmebot", "phone": req.phone.strip(), "apikey": req.apikey.strip()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.post("/admin/callmebot/test")
+async def admin_test_callmebot(authorization: Optional[str] = Header(None)):
+    admin = await require_admin(authorization)
+    r = await send_whatsapp_alert(
+        f"Test message from AVR Organics admin panel. Hi {admin.get('name', 'Admin')}! Your WhatsApp alerts are working."
+    )
+    return r
 
 
 # ---------- Admin: Products CRUD ----------

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, ScrollView, Modal,
+  View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, ScrollView, Modal, Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
@@ -144,11 +144,28 @@ export default function AdminOrders() {
               <Text style={styles.buyer}>
                 {item.user_name || item.address?.full_name || "—"}  ·  {item.user_email || ""}
               </Text>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
                 <Text style={styles.small}>
                   {new Date(item.created_at).toLocaleString()}  ·  {item.payment_method?.toUpperCase()}
                 </Text>
-                <Text style={styles.total}>₹{item.total.toFixed(2)}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Pressable
+                    testID={`share-wa-${item.id}`}
+                    onPress={(e) => {
+                      e.stopPropagation?.();
+                      const oidShort = item.id.slice(-8).toUpperCase();
+                      const itemsTxt = item.items.slice(0, 5).map((it) => `- ${it.name} x${it.quantity}`).join("\n");
+                      const text = encodeURIComponent(
+                        `NEW ORDER #${oidShort}\n${item.user_name || ""} (${item.user_email || ""})\nTotal: ₹${item.total.toFixed(2)} · ${item.payment_method?.toUpperCase()}\n${itemsTxt}\nDeliver: ${item.address.full_name}, ${item.address.city} - ${item.address.pincode}\nPhone: ${item.address.phone}`,
+                      );
+                      Linking.openURL(`https://wa.me/?text=${text}`);
+                    }}
+                    style={styles.waBtn}
+                  >
+                    <Feather name="message-circle" size={14} color="#25D366" />
+                  </Pressable>
+                  <Text style={styles.total}>₹{item.total.toFixed(2)}</Text>
+                </View>
               </View>
             </Pressable>
           )}
@@ -299,4 +316,9 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
   sumRow: { flexDirection: "row", justifyContent: "space-between" },
   cta: { marginTop: 12, paddingHorizontal: theme.spacing.xl, paddingVertical: 12, borderRadius: 999, backgroundColor: theme.colors.brand },
   ctaText: { color: "#fff", fontFamily: theme.font.text },
+  waBtn: {
+    width: 30, height: 30, borderRadius: 8,
+    backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: "#25D366",
+    alignItems: "center", justifyContent: "center",
+  },
 });
