@@ -1,0 +1,44 @@
+{
+  "summary": "Backend-only regression + new-feature testing for AVR Organics after Profile 'Order Summary' fix and Admin Panel Payment (UPI) verification. Added /app/backend/tests/test_avr_merchant_admin_orders.py (15 new tests). Verified: PUT /api/admin/merchant persists VPA/name and reflects in GET /api/support/info (merchant_vpa/merchant_name); admin gating on merchant endpoint (403 non-admin, 401 no-token); merchant name defaults to 'AVR Organics' when blank; POST /api/orders/create with payment_method=upi returns valid upi:// deep link containing pa/pn/am/cu params matching merchant + total; when merchant VPA blank, upi_link is null; GET /api/orders/me returns id, items[{product_id,name,price,quantity}], total, status, created_at (ISO string) sorted newest-first — exactly the shape Profile 'profile-order-summary' consumes; GET /api/admin/orders returns orders + stats {pending,paid,revenue,count}; PUT /api/admin/orders/{id}/status transitions paid->shipped->delivered with paid_at set on 'paid' (invalid status 400, missing order 404); PUT /api/admin/products/{id}/stock toggles in_stock and reflects in public GET /api/products/{id} (404 for unknown, 403 for non-admin). Full suite (iteration 1 + 2) = 34/34 passing.\n\nAlso grep-verified the referenced frontend files exist with the required testIDs: admin.tsx has 'Payment (UPI)' section with testIDs admin-merchant-vpa, admin-merchant-name, save-merchant; profile.tsx fetches /orders/me and renders testIDs profile-order-summary, view-all-orders, no-orders-cta, profile-order-{id}.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/admin/merchant", "issue": "No Pydantic validation on VPA format (e.g. 'name@handle'). Currently accepts any string including empty. Consider adding a regex validator to reject clearly invalid VPAs before they end up in the upi:// deep link."},
+      {"endpoint": "GET /api/support/info", "issue": "Always returns merchant_vpa even when blank string. Frontend should treat empty string as 'not configured'. Not a bug — just noting the contract."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_backend.py",
+    "/app/backend/tests/test_avr_merchant_admin_orders.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_iteration_2.xml",
+    "/app/test_reports/pytest/pytest_iteration_2_full.xml"
+  ],
+  "action_items": [
+    "None blocking. Optional: add VPA regex validation on PUT /api/admin/merchant (e.g. r'^[\\w.\\-]{2,}@[\\w.\\-]{2,}$').",
+    "Optional cleanup: /api/orders/{id}/mock-pay should be gated behind a DEV flag or removed once real Razorpay keys are live.",
+    "Iteration-1 minor items still open: DELETE /api/admin/products/{id} returns 200 even when nothing deleted; N+1 review aggregation in GET /api/products."
+  ],
+  "critical_code_review_comments": [
+    "PUT /api/admin/merchant strips whitespace and enforces default merchant name — good.",
+    "Order UPI link built via urllib.parse.urlencode — correctly URL-encoded — good.",
+    "/api/orders/me converts datetime -> ISO string before returning (JSON safe, Profile-friendly) — good.",
+    "/api/admin/orders/{id}/status validates status against a whitelist and 404s missing orders — good.",
+    "PUT /api/admin/products/{id}/stock returns 404 when product missing — good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_merchant_admin_orders.py (new)"
+  ],
+  "success_rate": {"backend": "100% (34/34, of which 15 new this iteration)", "frontend": "N/A - backend only per request"},
+  "seed_data_creation": "Reused iteration-1 seeded_user + seeded_admin fixtures (users + user_sessions with is_admin flag). Restored merchant settings to blank (vpa='', name='AVR Organics') and support settings to defaults after full run to leave DB clean for next iteration.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: `set -a && . /app/frontend/.env && set +a && pytest /app/backend/tests/ -v` from any dir. Env var name is EXPO_PUBLIC_BACKEND_URL (not EXPO_BACKEND_URL). Bearer auth is created by inserting into MongoDB user_sessions collection directly (see conftest.py::_seed_user). Merchant/support settings live in `settings` collection keyed by 'merchant' and 'support' — restore after any mutating test to keep support_info stable.",
+  "rca_of_issue": "The reported bug 'order summary missing in Profile tab' is backed by GET /api/orders/me which returns the exact fields the UI needs (id, items with names, total, status, created_at ISO). Backend contract verified end-to-end with a fresh user creating two orders then reading them back sorted newest-first. Frontend profile.tsx has already been fixed to fetch this endpoint on mount and on focus and renders testID='profile-order-summary' with per-item testID='profile-order-{id}' and a 'view-all-orders' link — matches spec.\n\nThe secondary 'Payment (UPI) section missing in Admin Panel' is verified as a bundle-cache issue on the reporter's device: admin.tsx source contains the 'Payment (UPI)' section header, the two TextInputs (testIDs admin-merchant-vpa + admin-merchant-name) and the 'save-merchant' Pressable. The backing PUT /api/admin/merchant works and mutation is observable via GET /api/support/info. Advise user to hard-refresh / clear Expo cache."
+}
