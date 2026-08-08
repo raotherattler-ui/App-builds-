@@ -1,12 +1,17 @@
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { useMemo } from "react";
+import { View, Text, StyleSheet, Pressable, ScrollView, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useAuth } from "@/src/lib/AuthContext";
-import { theme } from "@/src/theme";
+import { useTheme, useThemeMode, type Theme } from "@/src/theme";
 
 export default function Profile() {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const { mode, toggle } = useThemeMode();
+
   const { user, signOut } = useAuth();
 
   const rows: { icon: any; label: string; onPress: () => void; testID: string }[] = [
@@ -15,6 +20,9 @@ export default function Profile() {
   ];
 
   if (user?.is_admin) {
+    rows.unshift({
+      icon: "package", label: "All Orders (Admin)", onPress: () => router.push("/admin-orders"), testID: "profile-admin-orders",
+    } as any);
     rows.unshift({
       icon: "settings", label: "Admin Panel", onPress: () => router.push("/admin"), testID: "profile-admin",
     } as any);
@@ -48,6 +56,19 @@ export default function Profile() {
               <Feather name="chevron-right" size={18} color={theme.colors.mutedText} />
             </Pressable>
           ))}
+          <View style={[styles.row, { borderBottomWidth: 0 }]} testID="profile-dark-mode-row">
+            <View style={styles.iconBox}>
+              <Feather name={mode === "dark" ? "moon" : "sun"} size={16} color={theme.colors.brand} />
+            </View>
+            <Text style={styles.rowText}>Dark Mode</Text>
+            <Switch
+              testID="dark-mode-switch"
+              value={mode === "dark"}
+              onValueChange={toggle}
+              trackColor={{ true: theme.colors.brand, false: theme.colors.borderStrong }}
+              thumbColor="#fff"
+            />
+          </View>
         </View>
 
         <Pressable onPress={signOut} testID="logout-button" style={styles.logout}>
@@ -59,7 +80,7 @@ export default function Profile() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: Theme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.surface },
   profileCard: {
     flexDirection: "row", gap: theme.spacing.md, alignItems: "center",

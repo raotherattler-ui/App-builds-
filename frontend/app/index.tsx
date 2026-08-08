@@ -1,9 +1,10 @@
 import { View, ActivityIndicator } from "react-native";
 import { Redirect } from "expo-router";
 import { useAuth } from "@/src/lib/AuthContext";
-import { theme } from "@/src/theme";
+import { useTheme } from "@/src/theme";
 
 export default function Index() {
+  const theme = useTheme();
   const { user, loading } = useAuth();
 
   if (loading) {

@@ -1,11 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState , useMemo} from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { api } from "@/src/lib/api";
-import { theme } from "@/src/theme";
+import { useTheme, type Theme } from "@/src/theme";
 
 type CartItem = {
   product_id: string; quantity: number;
@@ -13,6 +13,9 @@ type CartItem = {
 };
 
 export default function Cart() {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+
   const [items, setItems] = useState<CartItem[]>([]);
   const [subtotal, setSubtotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -99,7 +102,7 @@ export default function Cart() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: Theme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.surface },
   header: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md },
   title: { fontSize: 24, color: theme.colors.onSurface, fontFamily: theme.font.display },

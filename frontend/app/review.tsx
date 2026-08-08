@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState , useMemo} from "react";
 import {
   View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator,
   KeyboardAvoidingView, Platform,
@@ -8,12 +8,15 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { api } from "@/src/lib/api";
-import { theme } from "@/src/theme";
+import { useTheme, type Theme } from "@/src/theme";
 
 type Item = { product_id: string; name: string; image: string; quantity: number };
 type Order = { id: string; items: Item[] };
 
 export default function ReviewScreen() {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+
   const { orderId, productId } = useLocalSearchParams<{ orderId?: string; productId?: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [selected, setSelected] = useState<Item | null>(null);
@@ -124,7 +127,7 @@ export default function ReviewScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: Theme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.surface },
   headerBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: theme.spacing.lg },
   iconBtn: { width: 38, height: 38, borderRadius: 999, backgroundColor: theme.colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },

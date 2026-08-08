@@ -3,11 +3,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
-import { useState } from "react";
+import { useState , useMemo} from "react";
 import { useAuth } from "@/src/lib/AuthContext";
-import { theme } from "@/src/theme";
+import { useTheme, type Theme } from "@/src/theme";
+import { LeafBackground } from "@/src/components/LeafBackground";
 
 export default function AuthScreen() {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+
   const { signIn } = useAuth();
   const [busy, setBusy] = useState(false);
 
@@ -28,9 +32,10 @@ export default function AuthScreen() {
         contentFit="cover"
       />
       <LinearGradient
-        colors={["rgba(43,46,42,0.15)", "rgba(43,46,42,0.85)"]}
+        colors={["rgba(11,31,20,0.55)", "rgba(11,31,20,0.9)"]}
         style={StyleSheet.absoluteFill}
       />
+      <LeafBackground density={12} intensity="normal" />
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <View style={styles.top}>
           <View style={styles.logoBadge}>
@@ -65,7 +70,7 @@ export default function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: Theme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.surfaceInverse },
   safe: { flex: 1, justifyContent: "space-between", padding: theme.spacing.xl },
   top: { flexDirection: "row", alignItems: "center", gap: theme.spacing.md },

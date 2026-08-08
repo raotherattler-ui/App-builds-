@@ -1,12 +1,15 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback , useMemo} from "react";
 import { View, Text, StyleSheet, Pressable, Linking, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { api } from "@/src/lib/api";
-import { theme } from "@/src/theme";
+import { useTheme, type Theme } from "@/src/theme";
 
 export default function Support() {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+
   const [info, setInfo] = useState<{ email: string; whatsapp: string; whatsapp_link: string } | null>(null);
 
   const load = useCallback(() => {
@@ -71,7 +74,7 @@ export default function Support() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: Theme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   headerBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: theme.spacing.lg },

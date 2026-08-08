@@ -8,10 +8,26 @@ import { StatusBar } from "expo-status-bar";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/lib/AuthContext";
+import { ThemeProvider, useThemeMode } from "@/src/theme";
 
 LogBox.ignoreAllLogs(true);
 
 SplashScreen.preventAutoHideAsync();
+
+function RootStack() {
+  const { theme, mode } = useThemeMode();
+  return (
+    <>
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: theme.colors.surface },
+        }}
+      />
+    </>
+  );
+}
 
 export default function RootLayout() {
   const [loaded, error] = useIconFonts();
@@ -27,10 +43,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <StatusBar style="dark" />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#FDFBF7" } }} />
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <RootStack />
+          </AuthProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

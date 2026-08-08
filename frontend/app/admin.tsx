@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState , useMemo} from "react";
 import {
   View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator,
   TextInput, KeyboardAvoidingView, Platform,
@@ -9,7 +9,7 @@ import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api } from "@/src/lib/api";
 import { useAuth } from "@/src/lib/AuthContext";
-import { theme } from "@/src/theme";
+import { useTheme, type Theme } from "@/src/theme";
 
 type Product = {
   id: string; name: string; tagline: string; description: string; price: number;
@@ -19,6 +19,9 @@ type Product = {
 type AdminUser = { user_id: string; email: string; name: string; picture?: string };
 
 export default function AdminScreen() {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -31,21 +34,28 @@ export default function AdminScreen() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [supportEmail, setSupportEmail] = useState("");
   const [supportWA, setSupportWA] = useState("");
+  const [merchantVpa, setMerchantVpa] = useState("");
+  const [merchantName, setMerchantName] = useState("AVR Organics");
+  const [savingMerchant, setSavingMerchant] = useState(false);
+  const [merchantMsg, setMerchantMsg] = useState("");
   const [savingSupport, setSavingSupport] = useState(false);
   const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
-    const [pr, s, c, a] = await Promise.all([
+    const [pr, s, c, a, mi] = await Promise.all([
       api<{ products: Product[] }>("/products"),
       api<{ email: string; whatsapp: string }>("/support/info"),
       api<{ categories: string[] }>("/admin/categories", { auth: true }).catch(() => ({ categories: [] })),
       api<{ admins: AdminUser[] }>("/admin/admins", { auth: true }).catch(() => ({ admins: [] })),
+      api<{ merchant_vpa: string; merchant_name: string }>("/support/info").catch(() => ({ merchant_vpa: "", merchant_name: "" })),
     ]);
     setProducts(pr.products);
     setSupportEmail(s.email);
     setSupportWA(s.whatsapp);
     setCategories(c.categories);
     setAdmins(a.admins);
+    setMerchantVpa(mi.merchant_vpa || "");
+    setMerchantName(mi.merchant_name || "AVR Organics");
     setLoading(false);
   }, []);
 
@@ -111,6 +121,26 @@ export default function AdminScreen() {
     } catch (err: any) {
       setAdminMsg(err?.message?.split(":").slice(1).join(":").trim() || "Failed");
     }
+  };
+
+  const saveMerchant = async () => {
+    setSavingMerchant(true); setMerchantMsg("");
+    try {
+      await api("/admin/merchant", { method: "PUT", auth: true, body: { vpa: merchantVpa.trim(), name: merchantName.trim() } });
+      setMerchantMsg(`Saved. UPI: ${merchantVpa}`);
+      setTimeout(() => setMerchantMsg(""), 3000);
+    } catch (e: any) {
+      setMerchantMsg(e?.message ?? "Failed to save");
+    } finally { setSavingMerchant(false); }
+  };
+
+  const toggleStock = async (pid: string, currentInStock: boolean) => {
+    try {
+      await api(`/admin/products/${pid}/stock`, {
+        method: "PUT", auth: true, body: { in_stock: !currentInStock },
+      });
+      setProducts((prev) => prev.map((p) => p.id === pid ? { ...p, in_stock: !currentInStock } : p));
+    } catch (e) { console.warn(e); }
   };
 
   const deleteProduct = async (id: string) => {
@@ -199,6 +229,38 @@ export default function AdminScreen() {
               {savingSupport ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save Support Info</Text>}
             </Pressable>
             {msg ? <Text style={[styles.msg, msg.includes("Saved") && { color: theme.colors.brand }]}>{msg}</Text> : null}
+          </View>
+
+          <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>Payment (UPI)</Text>
+          <View style={styles.card}>
+            <Text style={styles.label}>Merchant UPI ID (VPA)</Text>
+            <TextInput
+              testID="admin-merchant-vpa"
+              value={merchantVpa}
+              onChangeText={setMerchantVpa}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable
+              placeholder="yourname@okhdfcbank"
+              style={styles.input}
+              placeholderTextColor={theme.colors.mutedText}
+            />
+            <Text style={styles.label}>Merchant / Business Name</Text>
+            <TextInput
+              testID="admin-merchant-name"
+              value={merchantName}
+              onChangeText={setMerchantName}
+              autoCorrect={false}
+              editable
+              placeholder="AVR Organics"
+              style={styles.input}
+              placeholderTextColor={theme.colors.mutedText}
+            />
+            <Pressable testID="save-merchant" onPress={saveMerchant} disabled={savingMerchant} style={styles.cta}>
+              {savingMerchant ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save UPI Details</Text>}
+            </Pressable>
+            {merchantMsg ? <Text style={[styles.msg, merchantMsg.includes("Saved") && { color: theme.colors.brand }]}>{merchantMsg}</Text> : null}
+            <Text style={styles.hint}>Customers will pay directly to this UPI ID via GPay / PhonePe / Paytm / any UPI app.</Text>
           </View>
 
           <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>Admins ({admins.length})</Text>
@@ -321,7 +383,21 @@ export default function AdminScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.pName} numberOfLines={1}>{p.name}</Text>
                 <Text style={styles.pTag} numberOfLines={1}>{p.category} · ₹{p.price}</Text>
+                <Text style={[styles.pTag, { color: p.in_stock === false ? theme.colors.error : theme.colors.brand, marginTop: 2 }]}>
+                  {p.in_stock === false ? "OUT OF STOCK" : "IN STOCK"}
+                </Text>
               </View>
+              <Pressable
+                testID={`stock-toggle-${p.id}`}
+                onPress={() => toggleStock(p.id, p.in_stock !== false)}
+                style={[styles.pBtn, { width: 44 }]}
+              >
+                <Feather
+                  name={p.in_stock === false ? "x-circle" : "check-circle"}
+                  size={16}
+                  color={p.in_stock === false ? theme.colors.error : theme.colors.brand}
+                />
+              </Pressable>
               <Pressable testID={`edit-${p.id}`} onPress={() => setEditing(p)} style={styles.pBtn}>
                 <Feather name="edit-2" size={14} color={theme.colors.brand} />
               </Pressable>
@@ -412,7 +488,7 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: Theme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
   empty: { color: theme.colors.mutedText, fontFamily: theme.font.text },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState , useMemo} from "react";
 import {
   View, Text, StyleSheet, FlatList, Pressable, ScrollView, ActivityIndicator, RefreshControl, Linking,
 } from "react-native";
@@ -8,14 +8,18 @@ import { Feather, FontAwesome } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { api } from "@/src/lib/api";
-import { theme } from "@/src/theme";
+import { useTheme, type Theme } from "@/src/theme";
+import { LeafBackground } from "@/src/components/LeafBackground";
 
 type P = {
   id: string; name: string; tagline: string; price: number; image: string;
-  category: string; avg_rating: number; rating_count: number;
+  category: string; avg_rating: number; rating_count: number; in_stock?: boolean;
 };
 
 export default function Home() {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+
   const [products, setProducts] = useState<P[]>([]);
   const [cats, setCats] = useState<string[]>(["All"]);
   const [cat, setCat] = useState("All");
@@ -83,6 +87,7 @@ export default function Home() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]} testID="home-screen">
+      <LeafBackground density={10} intensity="subtle" />
       <View style={styles.headerBar}>
         <View>
           <Text style={styles.brand}>avr organics</Text>
@@ -115,7 +120,14 @@ export default function Home() {
               onPress={() => router.push(`/product/${item.id}`)}
               style={styles.card}
             >
-              <Image source={item.image} style={styles.cardImg} contentFit="cover" />
+              <View>
+                <Image source={item.image} style={styles.cardImg} contentFit="cover" />
+                {item.in_stock === false ? (
+                  <View style={styles.oosOverlay}>
+                    <Text style={styles.oosText}>OUT OF STOCK</Text>
+                  </View>
+                ) : null}
+              </View>
               <View style={{ padding: theme.spacing.md, gap: 4 }}>
                 <Text numberOfLines={1} style={styles.cardName}>{item.name}</Text>
                 <Text numberOfLines={1} style={styles.cardTag}>{item.tagline}</Text>
@@ -145,7 +157,7 @@ export default function Home() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: Theme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.surface },
   headerBar: {
     paddingHorizontal: theme.spacing.lg,
@@ -193,6 +205,12 @@ const styles = StyleSheet.create({
   cardTag: { fontSize: 11, color: theme.colors.mutedText, fontFamily: theme.font.text },
   cardPrice: { fontSize: 14, color: theme.colors.brand, fontFamily: theme.font.text },
   cardRating: { fontSize: 12, color: theme.colors.onSurface, fontFamily: theme.font.text },
+  oosOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center", justifyContent: "center",
+  },
+  oosText: { color: "#fff", fontSize: 12, letterSpacing: 1.2, fontFamily: theme.font.text },
   waFab: {
     position: "absolute", right: 16, bottom: 20,
     width: 54, height: 54, borderRadius: 999,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState , useMemo} from "react";
 import {
   View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator,
 } from "react-native";
@@ -7,16 +7,19 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { api } from "@/src/lib/api";
-import { theme } from "@/src/theme";
+import { useTheme, type Theme } from "@/src/theme";
 
 type Product = {
   id: string; name: string; tagline: string; description: string; price: number;
   image: string; category: string; benefits: string[]; ingredients: string[];
-  avg_rating: number; rating_count: number;
+  avg_rating: number; rating_count: number; in_stock?: boolean;
 };
 type Review = { id: string; rating: number; comment: string; user_name: string; created_at: string };
 
 export default function ProductDetail() {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+
   const { id } = useLocalSearchParams<{ id: string }>();
   const [p, setP] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -39,6 +42,7 @@ export default function ProductDetail() {
 
   const addToCart = async () => {
     if (!p) return;
+    if (p.in_stock === false) return;
     setAdding(true);
     try {
       await api("/cart/add", { method: "POST", auth: true, body: { product_id: p.id, quantity: 1 } });
@@ -132,10 +136,12 @@ export default function ProductDetail() {
         <Pressable
           testID="add-to-cart-button"
           onPress={addToCart}
-          disabled={adding}
-          style={styles.cta}
+          disabled={adding || p.in_stock === false}
+          style={[styles.cta, p.in_stock === false && { backgroundColor: theme.colors.borderStrong }]}
         >
-          {adding ? <ActivityIndicator color="#fff" /> : (
+          {adding ? <ActivityIndicator color="#fff" /> : p.in_stock === false ? (
+            <Text style={styles.ctaText}>Out of Stock</Text>
+          ) : (
             <>
               <Feather name="shopping-bag" size={16} color="#fff" />
               <Text style={styles.ctaText}>Add to Cart · ₹{p.price}</Text>
@@ -147,7 +153,7 @@ export default function ProductDetail() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: Theme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surface },
   headerBar: {

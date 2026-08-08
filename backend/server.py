@@ -82,7 +82,7 @@ class CheckoutAddress(BaseModel):
 
 class OrderCreateRequest(BaseModel):
     address: CheckoutAddress
-    payment_method: str = "razorpay"  # or "cod"
+    payment_method: str = "upi"  # "upi", "cod", "razorpay"
 
 
 class PaymentVerifyRequest(BaseModel):
@@ -323,6 +323,8 @@ async def create_order(req: OrderCreateRequest, authorization: Optional[str] = H
 
     order_id = f"ord_{uuid.uuid4().hex[:14]}"
     rzp_order_id = None
+    merchant = await get_merchant_settings()
+
     if req.payment_method == "razorpay":
         if razor_client:
             try:
@@ -339,9 +341,25 @@ async def create_order(req: OrderCreateRequest, authorization: Optional[str] = H
         else:
             rzp_order_id = f"mock_{uuid.uuid4().hex[:10]}"
 
+    # Build UPI deep link for direct-VPA payments
+    upi_link = None
+    if req.payment_method == "upi" and merchant["vpa"]:
+        import urllib.parse as _u
+        params = {
+            "pa": merchant["vpa"],
+            "pn": merchant["name"],
+            "am": f"{total:.2f}",
+            "cu": "INR",
+            "tn": f"Order {order_id[-8:].upper()}",
+            "tr": order_id[-12:],
+        }
+        upi_link = "upi://pay?" + _u.urlencode(params)
+
     doc = {
         "id": order_id,
         "user_id": user["user_id"],
+        "user_email": user.get("email", ""),
+        "user_name": user.get("name", ""),
         "items": items,
         "address": req.address.model_dump(),
         "subtotal": round(subtotal, 2),
@@ -349,6 +367,8 @@ async def create_order(req: OrderCreateRequest, authorization: Optional[str] = H
         "total": total,
         "payment_method": req.payment_method,
         "razorpay_order_id": rzp_order_id,
+        "upi_link": upi_link,
+        "merchant_vpa": merchant["vpa"] if req.payment_method == "upi" else None,
         "status": "pending",
         "created_at": datetime.now(timezone.utc),
     }
@@ -360,6 +380,10 @@ async def create_order(req: OrderCreateRequest, authorization: Optional[str] = H
         "amount": int(total * 100),
         "currency": "INR",
         "total": total,
+        "upi_link": upi_link,
+        "merchant_vpa": merchant["vpa"] if req.payment_method == "upi" else None,
+        "merchant_name": merchant["name"],
+        "payment_method": req.payment_method,
     }
 
 
@@ -500,20 +524,36 @@ async def get_support_settings() -> dict:
     return {"email": DEFAULT_SUPPORT_EMAIL, "whatsapp": DEFAULT_SUPPORT_WHATSAPP}
 
 
+async def get_merchant_settings() -> dict:
+    s = await db.settings.find_one({"key": "merchant"}, {"_id": 0})
+    return {
+        "vpa": (s or {}).get("vpa", ""),
+        "name": (s or {}).get("name", "AVR Organics"),
+    }
+
+
 @api_router.get("/support/info")
 async def support_info():
     s = await get_support_settings()
     wp = s["whatsapp"].replace("+", "").replace(" ", "").replace("-", "")
+    m = await get_merchant_settings()
     return {
         "email": s["email"],
         "whatsapp": s["whatsapp"],
         "whatsapp_link": f"https://wa.me/{wp}",
+        "merchant_vpa": m["vpa"],
+        "merchant_name": m["name"],
     }
 
 
 class SupportUpdateRequest(BaseModel):
     email: str
     whatsapp: str
+
+
+class MerchantUpdateRequest(BaseModel):
+    vpa: str
+    name: str
 
 
 async def require_admin(authorization: Optional[str]) -> dict:
@@ -529,6 +569,17 @@ async def admin_update_support(req: SupportUpdateRequest, authorization: Optiona
     await db.settings.update_one(
         {"key": "support"},
         {"$set": {"key": "support", "email": req.email, "whatsapp": req.whatsapp}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.put("/admin/merchant")
+async def admin_update_merchant(req: MerchantUpdateRequest, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    await db.settings.update_one(
+        {"key": "merchant"},
+        {"$set": {"key": "merchant", "vpa": req.vpa.strip(), "name": req.name.strip() or "AVR Organics"}},
         upsert=True,
     )
     return {"ok": True}
@@ -684,6 +735,66 @@ async def admin_revoke(user_id: str, authorization: Optional[str] = Header(None)
         raise HTTPException(400, "At least one admin must remain")
     await db.users.update_one({"user_id": user_id}, {"$set": {"is_admin": False}})
     return {"ok": True}
+
+
+# ---------- Admin: All Orders + Status ----------
+class OrderStatusUpdateRequest(BaseModel):
+    status: str  # pending, paid, shipped, delivered, cancelled
+
+
+@api_router.get("/admin/orders")
+async def admin_list_orders(status: Optional[str] = None, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    q = {}
+    if status:
+        q["status"] = status
+    docs = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    for d in docs:
+        if isinstance(d.get("created_at"), datetime):
+            d["created_at"] = d["created_at"].isoformat()
+        if isinstance(d.get("paid_at"), datetime):
+            d["paid_at"] = d["paid_at"].isoformat()
+    # Aggregate stats
+    pending_count = await db.orders.count_documents({"status": "pending"})
+    paid_count = await db.orders.count_documents({"status": "paid"})
+    revenue_agg = await db.orders.aggregate([
+        {"$match": {"status": {"$in": ["paid", "shipped", "delivered"]}}},
+        {"$group": {"_id": None, "total": {"$sum": "$total"}}},
+    ]).to_list(1)
+    revenue = round(revenue_agg[0]["total"], 2) if revenue_agg else 0.0
+    return {
+        "orders": docs,
+        "stats": {"pending": pending_count, "paid": paid_count, "revenue": revenue, "count": len(docs)},
+    }
+
+
+@api_router.put("/admin/orders/{order_id}/status")
+async def admin_update_order_status(order_id: str, req: OrderStatusUpdateRequest, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    valid = {"pending", "paid", "shipped", "delivered", "cancelled"}
+    if req.status not in valid:
+        raise HTTPException(400, "Invalid status")
+    upd = {"status": req.status}
+    if req.status == "paid":
+        upd["paid_at"] = datetime.now(timezone.utc)
+    r = await db.orders.update_one({"id": order_id}, {"$set": upd})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Order not found")
+    return {"ok": True}
+
+
+# ---------- Admin: Product Stock Toggle ----------
+class StockToggleRequest(BaseModel):
+    in_stock: bool
+
+
+@api_router.put("/admin/products/{product_id}/stock")
+async def admin_toggle_stock(product_id: str, req: StockToggleRequest, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    r = await db.products.update_one({"id": product_id}, {"$set": {"in_stock": req.in_stock}})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Product not found")
+    return {"ok": True, "in_stock": req.in_stock}
 
 
 @api_router.get("/")
