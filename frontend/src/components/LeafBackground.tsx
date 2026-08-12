@@ -19,7 +19,7 @@ import { useTheme } from "@/src/theme";
  */
 
 type LeafConfig = {
-  icon: "leaf" | "leaf-maple" | "sprout";
+  icon: "leaf" | "leaf-maple" | "sprout" | "clover";
   size: number;
   startX: number;   // 0..1
   driftX: number;   // px
@@ -41,10 +41,10 @@ function Leaf({ cfg, screenH }: { cfg: LeafConfig; screenH: number }) {
   }, [t, cfg.delay, cfg.duration]);
 
   const style = useAnimatedStyle(() => {
-    const y = interpolate(t.value, [0, 1], [-80, screenH + 80]);
-    const x = interpolate(t.value, [0, 0.5, 1], [0, cfg.driftX, 0]);
+    const y = interpolate(t.value, [0, 1], [-100, screenH + 100]);
+    const x = interpolate(t.value, [0, 0.25, 0.5, 0.75, 1], [0, cfg.driftX, 0, -cfg.driftX, 0]);
     const rot = t.value * 360 * cfg.rotate;
-    const opac = interpolate(t.value, [0, 0.1, 0.9, 1], [0, cfg.opacity, cfg.opacity, 0]);
+    const opac = interpolate(t.value, [0, 0.08, 0.9, 1], [0, cfg.opacity, cfg.opacity, 0]);
     return {
       transform: [{ translateY: y }, { translateX: x }, { rotate: `${rot}deg` }],
       opacity: opac,
@@ -65,34 +65,39 @@ function Leaf({ cfg, screenH }: { cfg: LeafConfig; screenH: number }) {
   );
 }
 
-export const LeafBackground: React.FC<{ density?: number; intensity?: "subtle" | "normal" }> = ({
-  density = 9,
-  intensity = "normal",
+export const LeafBackground: React.FC<{ density?: number; intensity?: "subtle" | "normal" | "vivid" }> = ({
+  density = 12,
+  intensity = "vivid",
 }) => {
   const { height } = useWindowDimensions();
   const theme = useTheme();
 
   const cfgs = useMemo<LeafConfig[]>(() => {
-    const icons: LeafConfig["icon"][] = ["leaf", "leaf-maple", "sprout"];
-    const colorA = theme.colors.brand;
-    const colorB = theme.colors.brandSecondary;
-    const colorC = theme.colors.brandTertiary;
+    const icons: LeafConfig["icon"][] = ["leaf", "leaf-maple", "sprout", "clover"];
+    const brand = theme.colors.brand;
+    const gold = theme.colors.brandSecondary;
+    const brightSage = "#B8D8A9";
+    const cream = "#EAE4CE";
     const list: LeafConfig[] = [];
+    const baseOpacity =
+      intensity === "subtle" ? 0.22 :
+      intensity === "normal" ? 0.35 :
+      0.45;
     for (let i = 0; i < density; i++) {
       list.push({
         icon: icons[i % icons.length],
-        size: 22 + (i * 7) % 24,
-        startX: ((i * 89) % 100) / 100,
-        driftX: ((i % 2 === 0 ? 1 : -1) * (18 + (i * 11) % 40)),
-        duration: 14000 + ((i * 1300) % 12000),
-        delay: (i * 900) % 8000,
-        opacity: (intensity === "subtle" ? 0.09 : 0.18) + ((i % 3) * 0.03),
-        rotate: 0.5 + ((i * 0.3) % 1.5),
-        color: [colorA, colorB, colorC][i % 3],
+        size: 28 + (i * 9) % 32,
+        startX: ((i * 71) % 100) / 100,
+        driftX: ((i % 2 === 0 ? 1 : -1) * (26 + (i * 13) % 46)),
+        duration: 12000 + ((i * 1500) % 14000),
+        delay: (i * 700) % 7000,
+        opacity: baseOpacity + ((i % 3) * 0.05),
+        rotate: 0.5 + ((i * 0.4) % 1.6),
+        color: [brand, gold, brightSage, cream][i % 4],
       });
     }
     return list;
-  }, [density, intensity, theme.colors.brand, theme.colors.brandSecondary, theme.colors.brandTertiary]);
+  }, [density, intensity, theme.colors.brand, theme.colors.brandSecondary]);
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">

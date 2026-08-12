@@ -87,7 +87,7 @@ export default function Home() {
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]} testID="home-screen">
-      <LeafBackground density={10} intensity="subtle" />
+      <LeafBackground density={14} intensity="normal" />
       <View style={styles.headerBar}>
         <View>
           <Text style={styles.brand}>avr organics</Text>

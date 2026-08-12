@@ -35,7 +35,7 @@ export default function AuthScreen() {
         colors={["rgba(11,31,20,0.55)", "rgba(11,31,20,0.9)"]}
         style={StyleSheet.absoluteFill}
       />
-      <LeafBackground density={12} intensity="normal" />
+      <LeafBackground density={16} intensity="vivid" />
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <View style={styles.top}>
           <View style={styles.logoBadge}>
