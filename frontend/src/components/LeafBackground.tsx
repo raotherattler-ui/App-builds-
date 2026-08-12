@@ -11,11 +11,10 @@ import Animated, {
   interpolate,
 } from "react-native-reanimated";
 
-import { useTheme } from "@/src/theme";
-
 /**
  * Softly floating leaf petals that drift down and rotate.
- * Purely decorative — mounted behind screen content.
+ * All leaves use an apple-green palette, purely decorative.
+ * Mounted behind screen content.
  */
 
 type LeafConfig = {
@@ -70,14 +69,11 @@ export const LeafBackground: React.FC<{ density?: number; intensity?: "subtle" |
   intensity = "vivid",
 }) => {
   const { height } = useWindowDimensions();
-  const theme = useTheme();
 
   const cfgs = useMemo<LeafConfig[]>(() => {
     const icons: LeafConfig["icon"][] = ["leaf", "leaf-maple", "sprout", "clover"];
-    const brand = theme.colors.brand;
-    const gold = theme.colors.brandSecondary;
-    const brightSage = "#B8D8A9";
-    const cream = "#EAE4CE";
+    // Apple green palette — all leaves use apple-green tones with subtle brightness variation.
+    const appleGreens = ["#8DB600", "#9ACD32", "#7CB518", "#A8CF3A"];
     const list: LeafConfig[] = [];
     const baseOpacity =
       intensity === "subtle" ? 0.22 :
@@ -93,11 +89,11 @@ export const LeafBackground: React.FC<{ density?: number; intensity?: "subtle" |
         delay: (i * 700) % 7000,
         opacity: baseOpacity + ((i % 3) * 0.05),
         rotate: 0.5 + ((i * 0.4) % 1.6),
-        color: [brand, gold, brightSage, cream][i % 4],
+        color: appleGreens[i % appleGreens.length],
       });
     }
     return list;
-  }, [density, intensity, theme.colors.brand, theme.colors.brandSecondary]);
+  }, [density, intensity]);
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
