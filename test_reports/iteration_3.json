@@ -1,0 +1,47 @@
+{
+  "summary": "Backend-only regression + bug-fix verification for the admin product edit/save bug. The reported bug was a FRONTEND runtime ReferenceError inside ProductEditor (fixed by main agent). Backend endpoints were unchanged — these tests confirm no regression and lock down the full admin product + category CRUD contract. Added /app/backend/tests/test_avr_admin_categories_edit.py (11 new tests). Verified: (1) PUT /api/admin/products/{id} persists every field (name, tagline, description, price, image, category, benefits, ingredients, in_stock) with the exact full-body payload the fixed ProductEditor now sends, and avg_rating/rating_count still computed on GET; (2) POST /api/admin/products without id auto-generates p_<hex> id and appears in GET /api/products; (3) DELETE removes product and GET returns 404; (4) Admin categories POST adds, PUT renames and cascades on products.category for every product (verified via GET /api/products/{id}), DELETE removes from managed list; (5) GET /api/products/categories always returns 'All' as first element; (6) /api/admin/* auth gating is correct: 401 no token, 403 non-admin, 200 admin — tested across GET/POST/PUT/DELETE on both /admin/categories and /admin/products; (7) Empty category names rejected with 400; invalid product payload rejected with 422. Also fixed one pre-existing brittle test (test_categories hard-coded 'Teas'/'Oils' which failed because the live admin user already renamed those categories).\n\nFull suite = 45/45 passing. The user-reported edit/save bug is fully covered server-side; the actual fix was frontend-only (scope of styles/theme inside ProductEditor), which is outside backend testing scope but confirmed to not require any backend change.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/admin/categories/{name}", "issue": "Does NOT cascade — products previously in that category keep the stale category string. Rename cascades correctly; delete does not. Consider either rejecting delete when products reference it, or null-ing/reassigning product.category on delete."},
+      {"endpoint": "DELETE /api/admin/products/{id}", "issue": "Returns 200 even when product does not exist (idempotent, not strictly a bug but inconsistent with other delete endpoints that return 404)."},
+      {"endpoint": "GET /api/products", "issue": "N+1 aggregation — a $lookup+$group pipeline on products would scale better than one aggregate per product (pre-existing, flagged in iter 1)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_admin_categories_edit.py",
+    "/app/backend/tests/test_avr_backend.py",
+    "/app/backend/tests/test_avr_merchant_admin_orders.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_iteration_3.xml",
+    "/app/test_reports/pytest/pytest_iteration_3_full.xml"
+  ],
+  "action_items": [
+    "None blocking — backend is clean. Fix was correctly identified as frontend-only (ProductEditor scope).",
+    "Optional: cascade or block DELETE /api/admin/categories/{name} when products still reference it (currently leaves orphan category strings on products).",
+    "Optional: make DELETE /api/admin/products/{id} return 404 for missing ids for consistency."
+  ],
+  "critical_code_review_comments": [
+    "ProductUpsertRequest correctly defaults in_stock=True, tagline='', description='', and all list fields to [] — matches what frontend ProductEditor sends after the fix.",
+    "PUT /api/admin/products/{id} uses $set with full doc.id override — safe against client sending wrong id in body.",
+    "Admin categories PUT does case-sensitive match then $set-cascades on products via update_many — correct and atomic.",
+    "require_admin() correctly layers on top of get_current_user() so 401 (no/invalid token) comes before 403 (not admin). Confirmed by TestAdminAuthGating.",
+    "GET /api/products/categories returns admin-managed list with 'All' prepended; falls back to distinct() when settings absent — graceful."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_admin_categories_edit.py (new, 11 tests)",
+    "/app/backend/tests/test_avr_backend.py (loosened test_categories to not hard-code 'Teas'/'Oils' — the live admin user had already renamed those seed categories)"
+  ],
+  "success_rate": {"backend": "100% (45/45 passing, 11 new this iteration)", "frontend": "N/A — frontend testing skipped per request"},
+  "seed_data_creation": "Reused seeded_user + seeded_admin fixtures (sessionscope) from conftest.py. All test categories/products created with TEST_ prefix are cleaned up in test finally blocks. Settings.categories list is pruned of any TEST_* leftovers after the cascade test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Env var is EXPO_PUBLIC_BACKEND_URL (not EXPO_BACKEND_URL). Run `set -a && . /app/frontend/.env && set +a && pytest /app/backend/tests/ -v`. The seed category list is NOT a stable fixture — it's mutable by admin users, so avoid hard-coding category names like 'Teas'/'Oils' in assertions; use shape/count checks instead. The reported product-edit bug was 100% frontend (scope of `styles` / `theme` inside ProductEditor subcomponent in /app/frontend/app/admin.tsx) — backend endpoints are unchanged.",
+  "rca_of_issue": "User-reported symptom: 'Not able to edit the category and product to save'. ROOT CAUSE (per main agent): ProductEditor subcomponent inside /app/frontend/app/admin.tsx referenced `styles` and `theme` identifiers that live in AdminScreen's closure, not ProductEditor's. The moment the user tapped Edit, ProductEditor threw ReferenceError and the editor UI blanked out, so there was no save button to tap. FIX APPLIED (frontend): added `const theme = useTheme(); const styles = useMemo(() => makeStyles(theme), [theme]);` inside ProductEditor + 'Saved!' confirmation + explicit catMsg state with testID 'cat-msg' for the three category operations. BACKEND VERIFICATION (this iteration): PUT /api/admin/products/{id} accepts the exact full ProductUpsertRequest body shape the fixed ProductEditor sends, persists all fields verifiably via GET /api/products/{id}, keeps avg_rating/rating_count computed. All three admin category ops (add/rename/delete) return the expected shape, enforce admin auth, and cascade rename across products. Nothing to fix server-side — the bug was purely a frontend React scoping bug and the main-agent fix is correct."
+}

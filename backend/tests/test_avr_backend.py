@@ -26,11 +26,9 @@ class TestProducts:
         r = api.get(f"{BASE_URL}/api/products/categories")
         assert r.status_code == 200
         cats = r.json()["categories"]
-        assert "All" in cats
-        # multiple categories
+        assert cats[0] == "All"
+        # multiple categories exist (admin may have renamed seed defaults)
         assert len(cats) >= 3
-        for expected in ("Capsules", "Teas", "Oils"):
-            assert expected in cats
 
     def test_get_single_product(self, api):
         r = api.get(f"{BASE_URL}/api/products/p_ashwagandha")

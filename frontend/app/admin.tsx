@@ -18,6 +18,59 @@ type Product = {
 
 type AdminUser = { user_id: string; email: string; name: string; picture?: string };
 
+const makeStyles = (theme: Theme) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: theme.colors.surface },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
+  empty: { color: theme.colors.mutedText, fontFamily: theme.font.text },
+  headerBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: theme.spacing.lg },
+  iconBtn: { width: 38, height: 38, borderRadius: 999, backgroundColor: theme.colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 18, color: theme.colors.onSurface, fontFamily: theme.font.display },
+  section: { fontSize: 16, color: theme.colors.onSurface, fontFamily: theme.font.display },
+  card: { backgroundColor: theme.colors.surfaceSecondary, padding: theme.spacing.lg, borderRadius: theme.radius.lg, gap: 6 },
+  label: { fontSize: 12, color: theme.colors.mutedText, marginTop: 6, fontFamily: theme.font.text },
+  input: {
+    borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md,
+    paddingHorizontal: 12, paddingVertical: 12, backgroundColor: theme.colors.surface,
+    fontFamily: theme.font.text, color: theme.colors.onSurface, fontSize: 14,
+  },
+  msg: { color: theme.colors.error, fontFamily: theme.font.text, marginTop: 6 },
+  cta: { marginTop: 12, backgroundColor: theme.colors.brand, paddingVertical: 14, borderRadius: 999, alignItems: "center" },
+  ctaText: { color: "#fff", fontFamily: theme.font.text, fontSize: 15 },
+  addBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: theme.colors.brand,
+  },
+  addBtnText: { color: "#fff", fontFamily: theme.font.text, fontSize: 13 },
+  pCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    padding: 10, backgroundColor: theme.colors.surfaceSecondary, borderRadius: theme.radius.lg,
+  },
+  pThumb: { width: 50, height: 50, borderRadius: 10, backgroundColor: theme.colors.brandTertiary },
+  pName: { fontSize: 14, color: theme.colors.onSurface, fontFamily: theme.font.text },
+  pTag: { fontSize: 12, color: theme.colors.mutedText, fontFamily: theme.font.text },
+  pBtn: {
+    width: 34, height: 34, borderRadius: 8, backgroundColor: theme.colors.surface,
+    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.border,
+  },
+  catRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.divider,
+  },
+  catName: { flex: 1, color: theme.colors.onSurface, fontFamily: theme.font.text, fontSize: 14 },
+  catBtn: {
+    width: 30, height: 30, borderRadius: 8, backgroundColor: theme.colors.surface,
+    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.border,
+  },
+  adminAvatar: {
+    width: 36, height: 36, borderRadius: 999, backgroundColor: theme.colors.brand,
+    alignItems: "center", justifyContent: "center",
+  },
+  adminAvatarText: { color: "#fff", fontFamily: theme.font.display, fontSize: 14 },
+  adminName: { color: theme.colors.onSurface, fontFamily: theme.font.text, fontSize: 14 },
+  adminEmail: { color: theme.colors.mutedText, fontFamily: theme.font.text, fontSize: 12 },
+  hint: { fontSize: 11, color: theme.colors.mutedText, fontFamily: theme.font.text, marginTop: 6 },
+});
+
 export default function AdminScreen() {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -30,6 +83,7 @@ export default function AdminScreen() {
   const [adminMsg, setAdminMsg] = useState("");
   const [newCat, setNewCat] = useState("");
   const [editingCat, setEditingCat] = useState<{ old: string; val: string } | null>(null);
+  const [catMsg, setCatMsg] = useState("");
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Product | null>(null);
   const [supportEmail, setSupportEmail] = useState("");
@@ -178,28 +232,51 @@ export default function AdminScreen() {
 
   const addCategory = async () => {
     const n = newCat.trim();
-    if (!n) return;
-    const r = await api<{ categories: string[] }>("/admin/categories", { method: "POST", auth: true, body: { name: n } });
-    setCategories(r.categories);
-    setNewCat("");
+    if (!n) { setCatMsg("Enter a name"); return; }
+    setCatMsg("");
+    try {
+      const r = await api<{ categories: string[] }>("/admin/categories", { method: "POST", auth: true, body: { name: n } });
+      setCategories(r.categories);
+      setNewCat("");
+      setCatMsg(`Added "${n}"`);
+      setTimeout(() => setCatMsg(""), 2500);
+    } catch (e: any) {
+      setCatMsg(e?.message ?? "Failed to add");
+    }
   };
 
   const renameCategory = async () => {
     if (!editingCat) return;
-    const r = await api<{ categories: string[] }>("/admin/categories", {
-      method: "PUT", auth: true,
-      body: { old_name: editingCat.old, new_name: editingCat.val.trim() },
-    });
-    setCategories(r.categories);
-    setEditingCat(null);
-    load();
+    const nv = editingCat.val.trim();
+    if (!nv) { setCatMsg("Enter a name"); return; }
+    setCatMsg("");
+    try {
+      const r = await api<{ categories: string[] }>("/admin/categories", {
+        method: "PUT", auth: true,
+        body: { old_name: editingCat.old, new_name: nv },
+      });
+      setCategories(r.categories);
+      setEditingCat(null);
+      setCatMsg(`Renamed to "${nv}"`);
+      setTimeout(() => setCatMsg(""), 2500);
+      load();
+    } catch (e: any) {
+      setCatMsg(e?.message ?? "Failed to rename");
+    }
   };
 
   const deleteCategory = async (name: string) => {
-    const r = await api<{ categories: string[] }>(`/admin/categories/${encodeURIComponent(name)}`, {
-      method: "DELETE", auth: true,
-    });
-    setCategories(r.categories);
+    setCatMsg("");
+    try {
+      const r = await api<{ categories: string[] }>(`/admin/categories/${encodeURIComponent(name)}`, {
+        method: "DELETE", auth: true,
+      });
+      setCategories(r.categories);
+      setCatMsg(`Deleted "${name}"`);
+      setTimeout(() => setCatMsg(""), 2500);
+    } catch (e: any) {
+      setCatMsg(e?.message ?? "Failed to delete");
+    }
   };
 
   if (editing) {
@@ -442,6 +519,18 @@ export default function AdminScreen() {
                 <Text style={styles.addBtnText}>Add</Text>
               </Pressable>
             </View>
+            {catMsg ? (
+              <Text
+                testID="cat-msg"
+                style={[
+                  styles.msg,
+                  (catMsg.startsWith("Added") || catMsg.startsWith("Renamed") || catMsg.startsWith("Deleted"))
+                    && { color: theme.colors.brand },
+                ]}
+              >
+                {catMsg}
+              </Text>
+            ) : null}
           </View>
 
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: theme.spacing.lg }}>
@@ -494,6 +583,8 @@ export default function AdminScreen() {
 }
 
 function ProductEditor({ product, onClose, onSaved }: { product: Product; onClose: () => void; onSaved: () => void }) {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [p, setP] = useState<Product>(product);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -514,7 +605,8 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
       } else {
         await api(`/admin/products`, { method: "POST", auth: true, body });
       }
-      onSaved();
+      setMsg("Saved!");
+      setTimeout(onSaved, 600);
     } catch (e: any) {
       setMsg(e?.message ?? "Failed to save");
     } finally { setBusy(false); }
@@ -559,7 +651,7 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
           {p.image ? (
             <Image source={p.image} style={{ width: "100%", height: 160, borderRadius: 12, marginTop: 6 }} contentFit="cover" />
           ) : null}
-          {msg ? <Text style={styles.msg}>{msg}</Text> : null}
+          {msg ? <Text style={[styles.msg, msg.includes("Saved") && { color: theme.colors.brand }]}>{msg}</Text> : null}
           <Pressable testID="save-product" onPress={save} disabled={busy} style={[styles.cta, { marginTop: 16 }]}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>{p.id ? "Save Changes" : "Create Product"}</Text>}
           </Pressable>
@@ -569,55 +661,3 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
   );
 }
 
-const makeStyles = (theme: Theme) => StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.colors.surface },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
-  empty: { color: theme.colors.mutedText, fontFamily: theme.font.text },
-  headerBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: theme.spacing.lg },
-  iconBtn: { width: 38, height: 38, borderRadius: 999, backgroundColor: theme.colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 18, color: theme.colors.onSurface, fontFamily: theme.font.display },
-  section: { fontSize: 16, color: theme.colors.onSurface, fontFamily: theme.font.display },
-  card: { backgroundColor: theme.colors.surfaceSecondary, padding: theme.spacing.lg, borderRadius: theme.radius.lg, gap: 6 },
-  label: { fontSize: 12, color: theme.colors.mutedText, marginTop: 6, fontFamily: theme.font.text },
-  input: {
-    borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md,
-    paddingHorizontal: 12, paddingVertical: 12, backgroundColor: theme.colors.surface,
-    fontFamily: theme.font.text, color: theme.colors.onSurface, fontSize: 14,
-  },
-  msg: { color: theme.colors.error, fontFamily: theme.font.text, marginTop: 6 },
-  cta: { marginTop: 12, backgroundColor: theme.colors.brand, paddingVertical: 14, borderRadius: 999, alignItems: "center" },
-  ctaText: { color: "#fff", fontFamily: theme.font.text, fontSize: 15 },
-  addBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: theme.colors.brand,
-  },
-  addBtnText: { color: "#fff", fontFamily: theme.font.text, fontSize: 13 },
-  pCard: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    padding: 10, backgroundColor: theme.colors.surfaceSecondary, borderRadius: theme.radius.lg,
-  },
-  pThumb: { width: 50, height: 50, borderRadius: 10, backgroundColor: theme.colors.brandTertiary },
-  pName: { fontSize: 14, color: theme.colors.onSurface, fontFamily: theme.font.text },
-  pTag: { fontSize: 12, color: theme.colors.mutedText, fontFamily: theme.font.text },
-  pBtn: {
-    width: 34, height: 34, borderRadius: 8, backgroundColor: theme.colors.surface,
-    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.border,
-  },
-  catRow: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.divider,
-  },
-  catName: { flex: 1, color: theme.colors.onSurface, fontFamily: theme.font.text, fontSize: 14 },
-  catBtn: {
-    width: 30, height: 30, borderRadius: 8, backgroundColor: theme.colors.surface,
-    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.colors.border,
-  },
-  adminAvatar: {
-    width: 36, height: 36, borderRadius: 999, backgroundColor: theme.colors.brand,
-    alignItems: "center", justifyContent: "center",
-  },
-  adminAvatarText: { color: "#fff", fontFamily: theme.font.display, fontSize: 14 },
-  adminName: { color: theme.colors.onSurface, fontFamily: theme.font.text, fontSize: 14 },
-  adminEmail: { color: theme.colors.mutedText, fontFamily: theme.font.text, fontSize: 12 },
-  hint: { fontSize: 11, color: theme.colors.mutedText, fontFamily: theme.font.text, marginTop: 6 },
-});
