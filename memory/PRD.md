@@ -20,6 +20,7 @@ A herbal products e-commerce mobile app for AVR Organics. Customers browse herba
 7. Reviews — only buyers of a product (paid order) can review. 1–5 stars + comment.
 8. Support screen — opens mailto: and wa.me link from settings.
 9. Admin Panel (visible only when `is_admin: true`) — full CRUD for products + editable support email/WhatsApp.
+10. Order Status Tracking — every order carries a `status_history` timeline. Admin can transition pending → paid → shipped → delivered (or cancel) from the Admin Orders screen. Users see a 4-step progress tracker + timeline on their "My Orders" tab.
 
 ## Admin Rule
 The first user to log in becomes admin automatically. Additional admins can be set via `ADMIN_EMAILS` env (comma-separated).

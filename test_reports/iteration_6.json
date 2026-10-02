@@ -1,0 +1,49 @@
+{
+  "summary": "Backend-only testing of new Order Status Tracking feature (status_history timeline). All 16 new tests + 56 regression tests PASS (72/72, 16.20s). Verified: (1) POST /api/orders/create seeds status_history with exactly one {status: 'pending', note: 'Order placed', at: iso}. (2) GET /api/orders/me returns status_history with iso-serialized 'at' field for every entry. (3) GET /api/orders/{order_id} returns serialized status_history. (4) PUT /api/admin/orders/{order_id}/status appends an entry with status + correct note ('Payment confirmed'/'Order shipped'/'Order delivered'/'Order cancelled'/'Marked pending') + 'by' (admin email) + iso 'at'; verified full pending->paid->shipped->delivered transition yields exactly 4 chronologically-ordered entries. (5) New GET /api/admin/orders/{order_id} endpoint — 200 for admin, 403 for user, 401 unauth, 404 for unknown id, carries serialized status_history. (6) POST /api/orders/{order_id}/mock-pay appends {status:'paid', note:'Payment received', at:iso}; final history [pending, paid]. (7) Backfill: inserted a legacy order without status_history, re-ran the same aggregation pipeline used at startup, confirmed the field is populated with [{status:'pending', note:'Order placed', at:created_at}]. Additionally asserted that no orders in DB currently have status_history missing (startup backfill worked). REGRESSION smoke on auth/products/categories/support/cart/merchant/callmebot/admin products/stock/categories/admins/upload all green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/admin/orders/{id}/status", "issue": "Does not enforce transition rules — e.g. an admin can move delivered -> pending or jump pending -> delivered skipping paid. Each call just appends to history. If business wants a strict state machine, add validation; currently any valid status is accepted at any time."},
+      {"endpoint": "PUT /api/admin/orders/{id}/status (status=paid)", "issue": "Updates paid_at every time status is set to paid, so manually re-setting to paid after a mock-pay overwrites the original payment timestamp. Consider only setting paid_at if not already present."},
+      {"endpoint": "POST /api/orders/{id}/mock-pay", "issue": "Can be called repeatedly by the owner on the same order — each call appends another 'paid' entry and overwrites razorpay_payment_id/paid_at. Idempotency guard (reject if status already 'paid') would be safer."},
+      {"endpoint": "POST /api/orders/create", "issue": "Pre-existing: shipping threshold hard-coded (₹999 free, else ₹49). Non-blocking."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_status_history.py",
+    "/app/backend/tests/test_avr_merchant_admin_orders.py",
+    "/app/backend/tests/test_avr_backend.py",
+    "/app/backend/tests/test_avr_admin_categories_edit.py",
+    "/app/backend/tests/test_avr_upload.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_iteration_6.xml"
+  ],
+  "action_items": [
+    "No action required — status_history feature is fully functional and matches spec.",
+    "Optional (non-blocking): add a strict state-machine for PUT /admin/orders/{id}/status so delivered/cancelled are terminal and backward transitions are rejected.",
+    "Optional (non-blocking): make mock-pay idempotent (reject if order.status already 'paid') to avoid duplicate paid entries.",
+    "Optional (non-blocking): preserve first paid_at across repeated status=paid updates ($setOnInsert-like semantics)."
+  ],
+  "critical_code_review_comments": [
+    "status_history is pushed via $push in both admin status update, mock-pay, and payments/verify — consistent model.",
+    "_serialize_order() centralises datetime->iso conversion for created_at, paid_at, and every status_history[*].at — avoids duplication across list/detail endpoints.",
+    "Startup backfill uses MongoDB 4.2+ aggregation pipeline update syntax ({$set: {...}} inside an array) to copy existing status/created_at into the seed entry — correct and idempotent (match condition is 'status_history does not exist').",
+    "require_admin() layered on get_current_user() produces correct 401-before-403 ordering on the new /admin/orders/{id} endpoint.",
+    "Note: admin status update stamps 'by' with admin.email — relying on email being non-empty. Fine for OAuth-sourced users; defensive fallback to admin.user_id would make history auditable if email is ever empty."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_status_history.py (new)"
+  ],
+  "success_rate": {"backend": "100% (72/72 — 16 new status_history + 56 regression)", "frontend": "N/A — skipped per request"},
+  "seed_data_creation": "Reused session-scoped seeded_user + seeded_admin fixtures (conftest.py). For the backfill test, inserted one legacy order directly into Mongo without status_history and cleaned it up in the finally block. All other test data uses TEST_-prefixed users and existing seeded products (p_ashwagandha, p_tulsi_tea, p_neem_caps, p_giloy).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Env var is EXPO_PUBLIC_BACKEND_URL (not EXPO_BACKEND_URL). Run: `set -a && . /app/frontend/.env && set +a && pytest /app/backend/tests/ -v`. Admin OAuth bypassed by seeding users + user_sessions directly in Mongo via conftest.py (herbal_bloom DB). status_history timeline notes are: 'Order placed' (create), 'Payment received' (mock-pay or verify_payment), 'Payment confirmed'/'Order shipped'/'Order delivered'/'Order cancelled'/'Marked pending' (admin status update). Admin updates also stamp 'by' with admin email. Backfill runs on app startup via aggregation-pipeline update_many; after it runs, no legacy order should be missing status_history. If testing a new status-transition rule, note that currently NO transition validation is enforced server-side.",
+  "rca_of_issue": "Not applicable — this iteration validates a NEW FEATURE, not a bug fix."
+}

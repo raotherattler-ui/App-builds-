@@ -8,6 +8,7 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api } from "@/src/lib/api";
+import { pickAndUploadImage } from "@/src/lib/upload";
 import { useAuth } from "@/src/lib/AuthContext";
 import { useTheme, type Theme } from "@/src/theme";
 
@@ -612,6 +613,21 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
     } finally { setBusy(false); }
   };
 
+  const [uploading, setUploading] = useState(false);
+  const uploadImage = async () => {
+    setUploading(true); setMsg("");
+    try {
+      const res = await pickAndUploadImage();
+      if (res?.url) {
+        setField("image" as any, res.url);
+        setMsg("Image uploaded!");
+        setTimeout(() => setMsg(""), 2000);
+      }
+    } catch (e: any) {
+      setMsg(e?.message ?? "Upload failed");
+    } finally { setUploading(false); }
+  };
+
   return (
     <SafeAreaView style={styles.root} edges={["top"]} testID="product-editor">
       <View style={styles.headerBar}>
@@ -634,22 +650,65 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
               val: (v: any) => (Array.isArray(v) ? v.join("\n") : v) },
             { k: "ingredients", l: "Ingredients (comma-separated)", tid: "edit-ingredients",
               val: (v: any) => (Array.isArray(v) ? v.join(", ") : v) },
-          ].map((f: any) => (
-            <View key={f.k}>
-              <Text style={styles.label}>{f.l}</Text>
-              <TextInput
-                testID={f.tid}
-                value={f.val ? f.val((p as any)[f.k]) : String((p as any)[f.k] ?? "")}
-                onChangeText={(v) => setField(f.k as any, v)}
-                multiline={f.multi}
-                keyboardType={(f as any).kbd}
-                placeholderTextColor={theme.colors.mutedText}
-                style={[styles.input, f.multi && { minHeight: 70, textAlignVertical: "top" }]}
+          ].map((f: any) => {
+            if (f.k === "image") {
+              return (
+                <View key={f.k}>
+                  <Text style={styles.label}>{f.l}</Text>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <TextInput
+                      testID={f.tid}
+                      value={String((p as any).image ?? "")}
+                      onChangeText={(v) => setField("image" as any, v)}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable
+                      placeholder="Paste a URL or tap Upload"
+                      placeholderTextColor={theme.colors.mutedText}
+                      style={[styles.input, { flex: 1 }]}
+                    />
+                    <Pressable
+                      testID="upload-image-btn"
+                      onPress={uploadImage}
+                      disabled={uploading}
+                      style={[styles.addBtn, { paddingHorizontal: 12, alignSelf: "stretch" }]}
+                    >
+                      {uploading ? <ActivityIndicator color="#fff" /> : (
+                        <>
+                          <Feather name="upload" size={14} color="#fff" />
+                          <Text style={styles.addBtnText}>Upload</Text>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            }
+            return (
+              <View key={f.k}>
+                <Text style={styles.label}>{f.l}</Text>
+                <TextInput
+                  testID={f.tid}
+                  value={f.val ? f.val((p as any)[f.k]) : String((p as any)[f.k] ?? "")}
+                  onChangeText={(v) => setField(f.k as any, v)}
+                  multiline={f.multi}
+                  keyboardType={(f as any).kbd}
+                  placeholderTextColor={theme.colors.mutedText}
+                  style={[styles.input, f.multi && { minHeight: 70, textAlignVertical: "top" }]}
+                />
+              </View>
+            );
+          })}
+          {p.image ? (
+            <View>
+              <Text style={styles.label}>Preview</Text>
+              <Image
+                source={p.image}
+                style={{ width: "100%", height: 180, borderRadius: 12, marginTop: 6, backgroundColor: theme.colors.brandTertiary }}
+                contentFit="cover"
+                onError={() => setMsg("Image URL did not load. Check the link or Upload directly.")}
               />
             </View>
-          ))}
-          {p.image ? (
-            <Image source={p.image} style={{ width: "100%", height: 160, borderRadius: 12, marginTop: 6 }} contentFit="cover" />
           ) : null}
           {msg ? <Text style={[styles.msg, msg.includes("Saved") && { color: theme.colors.brand }]}>{msg}</Text> : null}
           <Pressable testID="save-product" onPress={save} disabled={busy} style={[styles.cta, { marginTop: 16 }]}>

@@ -1,0 +1,47 @@
+{
+  "summary": "Backend-only testing of new image upload/download feature (Emergent Managed Object Storage). All 11 new tests + 45 regression tests PASS (56/56, 13.71s). Verified: (1) POST /api/upload admin flow returns 200 with correct {path, url, relative_url, size} shape; path matches 'avr-organics/uploads/{user_id}/{uuid}.{ext}'. (2) Auth gating: no token -> 401, non-admin -> 403, admin -> 200. (3) Validation: empty body -> 400, non-image content-type (application/pdf) -> 400, >8MB -> 413. (4) GET /api/files/{path}?token=<public_token> works unauth and returns correct content-type (image/png) and identical bytes. (5) Bearer session (any logged-in user) also authorizes download. (6) Public access when product.image references the path works without any auth. (7) No token + no auth + path not referenced by any product -> 401. (8) Unknown path -> 404. REGRESSION: All existing admin product CRUD, categories CRUD, merchant/callmebot admin, admin orders list+status, orders/create for upi and razorpay all PASS.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/files/{full_path:path}", "issue": "Public-access check uses regex match on products.image containing full_path. Safe here (uuid filename) but theoretically a prefix of one upload's path could appear in an unrelated product's image URL. Low risk; consider exact match on the ?token query substring instead."},
+      {"endpoint": "POST /api/upload", "issue": "ext fallback is 'bin' for unknown image/* subtypes (e.g. image/svg+xml). Download will still succeed because content_type is persisted, but the stored filename extension can mislead CDNs/browsers that sniff by extension."},
+      {"endpoint": "DELETE /api/admin/categories/{name}", "issue": "Pre-existing: does not cascade on products (non-blocking, flagged in iter 4)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_upload.py",
+    "/app/backend/tests/test_avr_admin_categories_edit.py",
+    "/app/backend/tests/test_avr_backend.py",
+    "/app/backend/tests/test_avr_merchant_admin_orders.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_iteration_5.xml",
+    "/app/test_reports/pytest/pytest_iteration_5_upload.xml"
+  ],
+  "action_items": [
+    "No action required — image upload/download feature is working as specified. All 7 required scenarios pass.",
+    "Optional (non-blocking): tighten public-access check in GET /api/files/{path} by matching on the token-bearing URL substring rather than regex on full_path to prevent theoretical substring collisions.",
+    "Optional (non-blocking): add explicit ext mapping for 'image/svg+xml' or reject it since SVGs can contain scripts."
+  ],
+  "critical_code_review_comments": [
+    "Upload path layout correctly namespaces by APP_NAME ('avr-organics') and owner user_id — safe multi-tenant.",
+    "Three-tier authorization in /api/files/{path} (public_token, Bearer session, product.image reference) matches the review spec exactly.",
+    "require_admin() layered on get_current_user() produces correct 401-before-403 ordering, verified end-to-end.",
+    "File size check (8MB) happens AFTER read() — a very large upload still buffers into memory before 413. Fine for 8MB cap; worth noting if cap is raised.",
+    "_init_storage() stale-key re-init pattern inside _put_object is only applied to the PUT path, not to _get_object — if download gets a 503 stale-key response once, it will surface as 500 to clients. Minor; consider mirroring the re-init-once pattern for GET."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_upload.py (new)"
+  ],
+  "success_rate": {"backend": "100% (56/56 passing — 11 new upload + 45 regression)", "frontend": "N/A — skipped per request"},
+  "seed_data_creation": "Reused session-scoped seeded_user + seeded_admin fixtures (conftest.py). Created a 1x1 red PNG (~70 bytes) in-memory for all upload tests to stay well under storage quota. All uploads rows deleted + any TEST_-prefixed products cleaned in fixture teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Env var is EXPO_PUBLIC_BACKEND_URL (not EXPO_BACKEND_URL). Run: `set -a && . /app/frontend/.env && set +a && pytest /app/backend/tests/ -v`. Storage credit is finite — keep upload payloads tiny (<1KB PNG). Admin OAuth bypassed by seeding users + user_sessions directly in Mongo (herbal_bloom). Upload path pattern is avr-organics/uploads/{user_id}/{uuid}.{ext} — do not assume a fixed extension; tests should use .startswith/endswith. Downloads also work with any logged-in Bearer, not just admin.",
+  "rca_of_issue": "Not applicable — this iteration validates a NEW FEATURE (not a bug fix). The user-reported bug ('I am not able to view Pictures, even after posting the Image links') is addressed by (a) replacing the broken external URL dependency with direct device-gallery upload via /api/upload, (b) adding inline onError preview in Product Editor, and (c) serving uploaded images from /api/files/{path} with a three-tier access model (per-file public_token, Bearer session, or product.image reference for catalog browsing). Backend contract fully exercised and green."
+}

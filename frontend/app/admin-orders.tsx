@@ -10,6 +10,7 @@ import { api } from "@/src/lib/api";
 import { useAuth } from "@/src/lib/AuthContext";
 import { useTheme, type Theme } from "@/src/theme";
 
+type HistoryEntry = { status: string; at: string; note?: string; by?: string };
 type Order = {
   id: string;
   user_email?: string;
@@ -23,6 +24,7 @@ type Order = {
   upi_link?: string | null;
   created_at: string;
   paid_at?: string;
+  status_history?: HistoryEntry[];
 };
 
 const STATUSES = ["all", "pending", "paid", "shipped", "delivered", "cancelled"];
@@ -70,7 +72,11 @@ export default function AdminOrders() {
     try {
       await api(`/admin/orders/${orderId}/status`, { method: "PUT", auth: true, body: { status } });
       await load();
-      setDetail((d) => (d ? { ...d, status } : d));
+      // Refresh detail with up-to-date history
+      try {
+        const r = await api<{ order: Order }>(`/admin/orders/${orderId}`, { auth: true });
+        setDetail(r.order);
+      } catch { setDetail((d) => (d ? { ...d, status } : d)); }
     } catch (e) { console.warn(e); }
   };
 
@@ -259,6 +265,31 @@ function OrderDetailModal({
           <Text style={styles.label}>Payment</Text>
           <Text style={styles.buyer}>{order.payment_method?.toUpperCase()}</Text>
           {order.merchant_vpa ? <Text style={styles.small}>To: {order.merchant_vpa}</Text> : null}
+        </View>
+
+        <View style={styles.oCard}>
+          <Text style={styles.label}>Timeline</Text>
+          {(order.status_history ?? []).slice().reverse().map((h, i) => {
+            const bg: Record<string, string> = {
+              pending: theme.colors.warning,
+              paid: theme.colors.brand,
+              shipped: theme.colors.brand,
+              delivered: theme.colors.brand,
+              cancelled: theme.colors.error,
+            };
+            return (
+              <View key={i} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start", paddingVertical: 6 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 999, backgroundColor: bg[h.status] ?? theme.colors.mutedText, marginTop: 4 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.buyer}>{h.note || h.status}</Text>
+                  <Text style={styles.small}>{h.status.toUpperCase()} · {new Date(h.at).toLocaleString()}{h.by ? ` · by ${h.by}` : ""}</Text>
+                </View>
+              </View>
+            );
+          })}
+          {(order.status_history ?? []).length === 0 ? (
+            <Text style={styles.small}>No events yet.</Text>
+          ) : null}
         </View>
 
         <Text style={[styles.label, { marginTop: 4 }]}>Update Status</Text>

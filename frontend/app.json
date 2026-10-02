@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.naturestorehub.r9bzbf"
+      "bundleIdentifier": "com.emergent.naturestorehub.r9bzbf",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Pick product images to upload"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +21,8 @@
         "backgroundColor": "#000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "app.emergent.naturestorehub198077bdd"
+      "package": "app.emergent.naturestorehub198077bdd",
+      "permissions": ["READ_EXTERNAL_STORAGE", "READ_MEDIA_IMAGES"]
     },
     "web": {
       "bundler": "metro",

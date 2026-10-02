@@ -1,13 +1,18 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Header, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Header, Request, UploadFile, File, Response, Query
+from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import io
 import logging
 import uuid
 import hmac
 import hashlib
 import httpx
+import requests
+import secrets
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -34,6 +39,70 @@ ADMIN_EMAILS = [e.strip().lower() for e in os.environ.get('ADMIN_EMAILS', '').sp
 razor_client = None
 if razorpay and RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
     razor_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+
+# ---------- Object storage (Emergent Managed) ----------
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+APP_NAME = "avr-organics"
+_storage_key: Optional[str] = None
+
+
+def _init_storage() -> Optional[str]:
+    """Call once at startup. Idempotent."""
+    global _storage_key
+    if _storage_key:
+        return _storage_key
+    if not EMERGENT_KEY:
+        return None
+    try:
+        r = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
+        r.raise_for_status()
+        _storage_key = r.json()["storage_key"]
+        return _storage_key
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"storage init failed: {e}")
+        return None
+
+
+def _put_object(path: str, data: bytes, content_type: str) -> dict:
+    key = _init_storage()
+    if not key:
+        raise HTTPException(503, "Storage not configured")
+    r = requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data,
+        timeout=120,
+    )
+    if r.status_code == 503:
+        # stale key — reinit once
+        global _storage_key
+        _storage_key = None
+        key = _init_storage()
+        if not key:
+            raise HTTPException(503, "Storage unavailable")
+        r = requests.put(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key, "Content-Type": content_type},
+            data=data,
+            timeout=120,
+        )
+    if r.status_code == 402:
+        raise HTTPException(402, "Storage credit limit reached — contact support.")
+    r.raise_for_status()
+    return r.json()
+
+
+def _get_object(path: str) -> tuple[bytes, str]:
+    key = _init_storage()
+    if not key:
+        raise HTTPException(503, "Storage not configured")
+    r = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    if r.status_code == 500:
+        raise HTTPException(404, "Not found")
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "application/octet-stream")
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -355,6 +424,7 @@ async def create_order(req: OrderCreateRequest, authorization: Optional[str] = H
         }
         upi_link = "upi://pay?" + _u.urlencode(params)
 
+    now = datetime.now(timezone.utc)
     doc = {
         "id": order_id,
         "user_id": user["user_id"],
@@ -370,7 +440,8 @@ async def create_order(req: OrderCreateRequest, authorization: Optional[str] = H
         "upi_link": upi_link,
         "merchant_vpa": merchant["vpa"] if req.payment_method == "upi" else None,
         "status": "pending",
-        "created_at": datetime.now(timezone.utc),
+        "status_history": [{"status": "pending", "at": now, "note": "Order placed"}],
+        "created_at": now,
     }
     await db.orders.insert_one(doc)
 
@@ -419,13 +490,17 @@ async def verify_payment(req: PaymentVerifyRequest, authorization: Optional[str]
         if expected != req.razorpay_signature:
             raise HTTPException(400, "Invalid signature")
 
+    now = datetime.now(timezone.utc)
     await db.orders.update_one(
         {"id": req.order_id},
-        {"$set": {
-            "status": "paid",
-            "razorpay_payment_id": req.razorpay_payment_id,
-            "paid_at": datetime.now(timezone.utc),
-        }},
+        {
+            "$set": {
+                "status": "paid",
+                "razorpay_payment_id": req.razorpay_payment_id,
+                "paid_at": now,
+            },
+            "$push": {"status_history": {"status": "paid", "at": now, "note": "Payment received"}},
+        },
     )
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": []}}, upsert=True)
     return {"ok": True, "status": "paid"}
@@ -439,16 +514,33 @@ async def mock_pay(order_id: str, authorization: Optional[str] = Header(None)):
     order = await db.orders.find_one({"id": order_id, "user_id": user["user_id"]}, {"_id": 0})
     if not order:
         raise HTTPException(404, "Order not found")
+    now = datetime.now(timezone.utc)
     await db.orders.update_one(
         {"id": order_id},
-        {"$set": {
-            "status": "paid",
-            "razorpay_payment_id": f"mock_pay_{uuid.uuid4().hex[:10]}",
-            "paid_at": datetime.now(timezone.utc),
-        }},
+        {
+            "$set": {
+                "status": "paid",
+                "razorpay_payment_id": f"mock_pay_{uuid.uuid4().hex[:10]}",
+                "paid_at": now,
+            },
+            "$push": {"status_history": {"status": "paid", "at": now, "note": "Payment received"}},
+        },
     )
     await db.carts.update_one({"user_id": user["user_id"]}, {"$set": {"items": []}}, upsert=True)
     return {"ok": True, "status": "paid"}
+
+
+def _serialize_order(d: dict) -> dict:
+    if isinstance(d.get("created_at"), datetime):
+        d["created_at"] = d["created_at"].isoformat()
+    if isinstance(d.get("paid_at"), datetime):
+        d["paid_at"] = d["paid_at"].isoformat()
+    hist = d.get("status_history") or []
+    for h in hist:
+        if isinstance(h.get("at"), datetime):
+            h["at"] = h["at"].isoformat()
+    d["status_history"] = hist
+    return d
 
 
 @api_router.get("/orders/me")
@@ -458,10 +550,7 @@ async def my_orders(authorization: Optional[str] = Header(None)):
         {"user_id": user["user_id"]}, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
     for d in docs:
-        if isinstance(d.get("created_at"), datetime):
-            d["created_at"] = d["created_at"].isoformat()
-        if isinstance(d.get("paid_at"), datetime):
-            d["paid_at"] = d["paid_at"].isoformat()
+        _serialize_order(d)
     return {"orders": docs}
 
 
@@ -471,10 +560,7 @@ async def get_order(order_id: str, authorization: Optional[str] = Header(None)):
     d = await db.orders.find_one({"id": order_id, "user_id": user["user_id"]}, {"_id": 0})
     if not d:
         raise HTTPException(404, "Not found")
-    if isinstance(d.get("created_at"), datetime):
-        d["created_at"] = d["created_at"].isoformat()
-    if isinstance(d.get("paid_at"), datetime):
-        d["paid_at"] = d["paid_at"].isoformat()
+    _serialize_order(d)
     return {"order": d}
 
 
@@ -814,7 +900,72 @@ async def admin_revoke(user_id: str, authorization: Optional[str] = Header(None)
     return {"ok": True}
 
 
-# ---------- Admin: All Orders + Status ----------
+# ---------- Image Upload (Admin only) ----------
+_EXT_MAP = {
+    "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
+    "image/webp": "webp", "image/gif": "gif", "image/heic": "heic",
+}
+
+
+@api_router.post("/upload")
+async def upload_image(file: UploadFile = File(...), authorization: Optional[str] = Header(None)):
+    user = await require_admin(authorization)
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Empty file")
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(413, "File too large (8MB max)")
+    ctype = (file.content_type or "image/jpeg").lower()
+    if not ctype.startswith("image/"):
+        raise HTTPException(400, "Only image uploads are allowed")
+    ext = _EXT_MAP.get(ctype, "bin")
+    uid = uuid.uuid4().hex
+    rel_path = f"{APP_NAME}/uploads/{user['user_id']}/{uid}.{ext}"
+    await run_in_threadpool(_put_object, rel_path, content, ctype)
+    token = secrets.token_urlsafe(16)
+    await db.uploads.insert_one({
+        "path": rel_path,
+        "owner_id": user["user_id"],
+        "content_type": ctype,
+        "size": len(content),
+        "public_token": token,
+        "created_at": datetime.now(timezone.utc),
+    })
+    # Build an absolute URL the frontend can embed directly.
+    backend_url = os.environ.get("PUBLIC_BACKEND_URL") or ""
+    rel_url = f"/api/files/{rel_path}?token={token}"
+    return {
+        "path": rel_path,
+        "url": (backend_url.rstrip("/") + rel_url) if backend_url else rel_url,
+        "relative_url": rel_url,
+        "size": len(content),
+    }
+
+
+@api_router.get("/files/{full_path:path}")
+async def download_image(full_path: str, token: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
+    # Accept either a Bearer session token for admins/owners OR the per-file public_token (web <img> use case).
+    doc = await db.uploads.find_one({"path": full_path}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found")
+    authorized = False
+    if token and token == doc.get("public_token"):
+        authorized = True
+    elif authorization and authorization.startswith("Bearer "):
+        tok = authorization.split(" ", 1)[1]
+        session = await db.user_sessions.find_one({"session_token": tok}, {"_id": 0})
+        if session:
+            authorized = True
+    # Product images are referenced from the catalog so they must be viewable to any customer:
+    # if the path is tagged in a product.image we also allow public access.
+    if not authorized:
+        prod = await db.products.find_one({"image": {"$regex": full_path}})
+        if prod:
+            authorized = True
+    if not authorized:
+        raise HTTPException(401, "Not authorized")
+    content, ctype = await run_in_threadpool(_get_object, full_path)
+    return Response(content=content, media_type=ctype, headers={"Cache-Control": "public, max-age=86400"})# ---------- Admin: All Orders + Status ----------
 class OrderStatusUpdateRequest(BaseModel):
     status: str  # pending, paid, shipped, delivered, cancelled
 
@@ -827,10 +978,7 @@ async def admin_list_orders(status: Optional[str] = None, authorization: Optiona
         q["status"] = status
     docs = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
     for d in docs:
-        if isinstance(d.get("created_at"), datetime):
-            d["created_at"] = d["created_at"].isoformat()
-        if isinstance(d.get("paid_at"), datetime):
-            d["paid_at"] = d["paid_at"].isoformat()
+        _serialize_order(d)
     # Aggregate stats
     pending_count = await db.orders.count_documents({"status": "pending"})
     paid_count = await db.orders.count_documents({"status": "paid"})
@@ -845,16 +993,44 @@ async def admin_list_orders(status: Optional[str] = None, authorization: Optiona
     }
 
 
+@api_router.get("/admin/orders/{order_id}")
+async def admin_get_order(order_id: str, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    d = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not d:
+        raise HTTPException(404, "Not found")
+    _serialize_order(d)
+    return {"order": d}
+
+
 @api_router.put("/admin/orders/{order_id}/status")
 async def admin_update_order_status(order_id: str, req: OrderStatusUpdateRequest, authorization: Optional[str] = Header(None)):
-    await require_admin(authorization)
+    admin = await require_admin(authorization)
     valid = {"pending", "paid", "shipped", "delivered", "cancelled"}
     if req.status not in valid:
         raise HTTPException(400, "Invalid status")
+    now = datetime.now(timezone.utc)
     upd = {"status": req.status}
     if req.status == "paid":
-        upd["paid_at"] = datetime.now(timezone.utc)
-    r = await db.orders.update_one({"id": order_id}, {"$set": upd})
+        upd["paid_at"] = now
+    note_map = {
+        "pending": "Marked pending",
+        "paid": "Payment confirmed",
+        "shipped": "Order shipped",
+        "delivered": "Order delivered",
+        "cancelled": "Order cancelled",
+    }
+    r = await db.orders.update_one(
+        {"id": order_id},
+        {
+            "$set": upd,
+            "$push": {"status_history": {
+                "status": req.status, "at": now,
+                "note": note_map.get(req.status, req.status),
+                "by": admin.get("email", ""),
+            }},
+        },
+    )
     if r.matched_count == 0:
         raise HTTPException(404, "Order not found")
     return {"ok": True}
@@ -981,6 +1157,24 @@ async def on_startup():
     await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
     await db.products.create_index("id", unique=True)
     await db.orders.create_index("id", unique=True)
+    await db.uploads.create_index("path", unique=True)
+    # Backfill status_history on legacy orders
+    try:
+        await db.orders.update_many(
+            {"status_history": {"$exists": False}},
+            [{"$set": {"status_history": [{
+                "status": "$status",
+                "at": "$created_at",
+                "note": "Order placed",
+            }]}}],
+        )
+    except Exception as e:
+        logger.warning(f"status_history backfill failed: {e}")
+    # Init object storage
+    try:
+        _init_storage()
+    except Exception as e:
+        logger.warning(f"storage init at startup: {e}")
     # seed
     for p in SAMPLE_PRODUCTS:
         await db.products.update_one({"id": p["id"]}, {"$set": p}, upsert=True)
