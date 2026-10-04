@@ -1175,9 +1175,13 @@ async def on_startup():
         _init_storage()
     except Exception as e:
         logger.warning(f"storage init at startup: {e}")
-    # seed
+    # Seed only if the product does NOT already exist — never overwrite user edits.
     for p in SAMPLE_PRODUCTS:
-        await db.products.update_one({"id": p["id"]}, {"$set": p}, upsert=True)
+        await db.products.update_one(
+            {"id": p["id"]},
+            {"$setOnInsert": p},
+            upsert=True,
+        )
     # seed categories list from distinct if not already set
     existing = await db.settings.find_one({"key": "categories"})
     if not existing:
