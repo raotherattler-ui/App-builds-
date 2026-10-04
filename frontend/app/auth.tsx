@@ -27,12 +27,12 @@ export default function AuthScreen() {
   return (
     <View style={styles.root} testID="auth-screen">
       <Image
-        source="https://images.unsplash.com/photo-1760507976180-dfe07dfe5296?fm=jpg&q=80&w=900&fit=crop"
+        source="https://images.unsplash.com/photo-1695123048616-cebba513381d?fm=jpg&q=85&w=900&fit=crop"
         style={StyleSheet.absoluteFill}
         contentFit="cover"
       />
       <LinearGradient
-        colors={["rgba(11,31,20,0.45)", "rgba(11,31,20,0.95)"]}
+        colors={["rgba(11,31,20,0.25)", "rgba(11,31,20,0.85)"]}
         style={StyleSheet.absoluteFill}
       />
       <LeafBackground density={16} intensity="vivid" />
@@ -79,7 +79,7 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
     backgroundColor: theme.colors.brand,
     alignItems: "center", justifyContent: "center",
   },
-  brand: { color: theme.colors.onSurfaceInverse, fontSize: 18, fontFamily: theme.font.display },
+  brand: { color: "#9ACD32", fontSize: 20, fontFamily: theme.font.display, letterSpacing: 0.5, textShadowColor: "rgba(0,0,0,0.45)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   bottom: { gap: theme.spacing.md },
   title: { color: "#fff", fontSize: 34, lineHeight: 38, fontFamily: theme.font.display },
   subtitle: { color: "rgba(255,255,255,0.85)", fontSize: 15, lineHeight: 22, fontFamily: theme.font.text },
