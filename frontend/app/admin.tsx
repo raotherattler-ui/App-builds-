@@ -14,7 +14,7 @@ import { useTheme, type Theme } from "@/src/theme";
 
 type Product = {
   id: string; name: string; tagline: string; description: string; price: number;
-  image: string; category: string; benefits: string[]; ingredients: string[]; in_stock: boolean;
+  image: string; images?: string[]; category: string; benefits: string[]; ingredients: string[]; in_stock: boolean;
 };
 
 type AdminUser = { user_id: string; email: string; name: string; picture?: string };
@@ -70,6 +70,36 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
   adminName: { color: theme.colors.onSurface, fontFamily: theme.font.text, fontSize: 14 },
   adminEmail: { color: theme.colors.mutedText, fontFamily: theme.font.text, fontSize: 12 },
   hint: { fontSize: 11, color: theme.colors.mutedText, fontFamily: theme.font.text, marginTop: 6 },
+  imgSlot: {
+    width: 100, height: 100, borderRadius: 12,
+    backgroundColor: theme.colors.brandTertiary, overflow: "hidden",
+    borderWidth: 1, borderColor: theme.colors.border,
+  },
+  imgSlotPic: { width: "100%", height: "100%" },
+  primaryBadge: {
+    position: "absolute", top: 4, left: 4,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    flexDirection: "row", alignItems: "center", gap: 3,
+  },
+  primaryBadgeText: { color: "#fff", fontSize: 8, letterSpacing: 0.8, fontFamily: theme.font.text },
+  imgSlotActions: {
+    position: "absolute", left: 0, right: 0, bottom: 0,
+    flexDirection: "row", justifyContent: "flex-end",
+    padding: 4, gap: 3,
+  },
+  imgActionBtn: {
+    width: 22, height: 22, borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    alignItems: "center", justifyContent: "center",
+  },
+  imgAdd: {
+    width: 100, height: 100, borderRadius: 12,
+    borderWidth: 2, borderColor: theme.colors.brand, borderStyle: "dashed",
+    alignItems: "center", justifyContent: "center", gap: 4,
+    backgroundColor: theme.colors.surface,
+  },
+  imgAddText: { fontSize: 11, color: theme.colors.brand, fontFamily: theme.font.text },
 });
 
 export default function AdminScreen() {
@@ -539,7 +569,7 @@ export default function AdminScreen() {
             <Pressable
               testID="add-product-button"
               onPress={() => setEditing({
-                id: "", name: "", tagline: "", description: "", price: 0, image: "",
+                id: "", name: "", tagline: "", description: "", price: 0, image: "", images: [],
                 category: "Capsules", benefits: [], ingredients: [], in_stock: true,
               })}
               style={styles.addBtn}
@@ -589,8 +619,33 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
   const [p, setP] = useState<Product>(product);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [cats, setCats] = useState<string[]>([]);
+  const [addingCat, setAddingCat] = useState(false);
+  const [newCat, setNewCat] = useState("");
+
+  useEffect(() => {
+    api<{ categories: string[] }>("/admin/categories", { auth: true })
+      .then((r) => setCats(r.categories))
+      .catch(() => {});
+  }, []);
 
   const setField = (k: keyof Product, v: any) => setP((prev) => ({ ...prev, [k]: v }));
+
+  const addNewCat = async () => {
+    const name = newCat.trim();
+    if (!name) return;
+    try {
+      const r = await api<{ categories: string[] }>("/admin/categories", { method: "POST", auth: true, body: { name } });
+      setCats(r.categories);
+      setField("category" as any, name);
+      setNewCat("");
+      setAddingCat(false);
+      setMsg(`Category "${name}" added & selected`);
+      setTimeout(() => setMsg(""), 2500);
+    } catch (e: any) {
+      setMsg(e?.message ?? "Failed to add category");
+    }
+  };
 
   const save = async () => {
     setBusy(true); setMsg("");
@@ -614,18 +669,69 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
   };
 
   const [uploading, setUploading] = useState(false);
+
+  // Keep `images` list and primary `image` in sync.
+  const getImages = (): string[] => {
+    const arr = Array.isArray(p.images) ? p.images.slice() : [];
+    if (arr.length === 0 && p.image) arr.push(p.image);
+    return arr;
+  };
+  const setImages = (next: string[]) => {
+    // de-dup, cap 5, and set primary = first
+    const seen: Set<string> = new Set();
+    const out: string[] = [];
+    for (const u of next) {
+      const t = (u || "").trim();
+      if (!t || seen.has(t)) continue;
+      seen.add(t);
+      out.push(t);
+      if (out.length >= 5) break;
+    }
+    setP((prev) => ({ ...prev, images: out, image: out[0] ?? "" }));
+  };
+  const addImageUrl = (url: string) => {
+    const t = (url || "").trim();
+    if (!t) return;
+    const cur = getImages();
+    if (cur.includes(t)) return;
+    if (cur.length >= 5) { setMsg("Max 5 images per product"); return; }
+    setImages([...cur, t]);
+  };
+  const removeImageAt = (idx: number) => {
+    const cur = getImages();
+    cur.splice(idx, 1);
+    setImages(cur);
+  };
+  const moveImage = (from: number, to: number) => {
+    const cur = getImages();
+    if (to < 0 || to >= cur.length) return;
+    const [item] = cur.splice(from, 1);
+    cur.splice(to, 0, item);
+    setImages(cur);
+  };
+  const makePrimary = (idx: number) => moveImage(idx, 0);
+
   const uploadImage = async () => {
+    const cur = getImages();
+    if (cur.length >= 5) { setMsg("Max 5 images per product"); return; }
     setUploading(true); setMsg("");
     try {
       const res = await pickAndUploadImage();
       if (res?.url) {
-        setField("image" as any, res.url);
-        setMsg("Image uploaded!");
+        addImageUrl(res.url);
+        setMsg(`Image added (${Math.min(cur.length + 1, 5)}/5)`);
         setTimeout(() => setMsg(""), 2000);
       }
     } catch (e: any) {
       setMsg(e?.message ?? "Upload failed");
     } finally { setUploading(false); }
+  };
+
+  const [urlInput, setUrlInput] = useState("");
+  const addFromUrl = () => {
+    if (!urlInput.trim()) return;
+    addImageUrl(urlInput);
+    setUrlInput("");
   };
 
   return (
@@ -639,77 +745,190 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
       </View>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.sm, paddingBottom: 80 }}>
+          <View>
+            <Text style={styles.label}>Category</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+              {cats.map((c) => {
+                const active = p.category === c;
+                return (
+                  <Pressable
+                    key={c}
+                    testID={`cat-pick-${c}`}
+                    onPress={() => setField("category" as any, c)}
+                    style={{
+                      paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: active ? theme.colors.brand : theme.colors.border,
+                      backgroundColor: active ? theme.colors.brand : theme.colors.surface,
+                    }}
+                  >
+                    <Text style={{
+                      color: active ? theme.colors.onBrandPrimary : theme.colors.onSurface,
+                      fontFamily: theme.font.text, fontSize: 13,
+                    }}>{c}</Text>
+                  </Pressable>
+                );
+              })}
+              {addingCat ? (
+                <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+                  <TextInput
+                    testID="editor-new-cat"
+                    value={newCat}
+                    onChangeText={setNewCat}
+                    autoFocus
+                    placeholder="New category"
+                    placeholderTextColor={theme.colors.mutedText}
+                    style={[styles.input, { paddingVertical: 6, minWidth: 140 }]}
+                    onSubmitEditing={addNewCat}
+                  />
+                  <Pressable testID="editor-add-cat-save" onPress={addNewCat} style={styles.catBtn}>
+                    <Feather name="check" size={14} color={theme.colors.brand} />
+                  </Pressable>
+                  <Pressable onPress={() => { setAddingCat(false); setNewCat(""); }} style={styles.catBtn}>
+                    <Feather name="x" size={14} color={theme.colors.mutedText} />
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  testID="editor-add-cat-btn"
+                  onPress={() => setAddingCat(true)}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
+                    borderWidth: 1, borderColor: theme.colors.brand, flexDirection: "row",
+                    alignItems: "center", gap: 4,
+                  }}
+                >
+                  <Feather name="plus" size={13} color={theme.colors.brand} />
+                  <Text style={{ color: theme.colors.brand, fontFamily: theme.font.text, fontSize: 13 }}>
+                    New
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+            {p.category && !cats.includes(p.category) ? (
+              <Text style={[styles.hint, { color: theme.colors.warning }]}>
+                Current category &quot;{p.category}&quot; is not in the admin list — tap a chip above or &quot;New&quot; to fix.
+              </Text>
+            ) : null}
+          </View>
           {[
             { k: "name", l: "Product Name", tid: "edit-name" },
             { k: "tagline", l: "Tagline", tid: "edit-tagline" },
-            { k: "category", l: "Category", tid: "edit-category" },
             { k: "price", l: "Price (INR)", tid: "edit-price", kbd: "decimal-pad" as const },
-            { k: "image", l: "Image URL", tid: "edit-image" },
             { k: "description", l: "Description", tid: "edit-desc", multi: true },
             { k: "benefits", l: "Benefits (one per line)", tid: "edit-benefits", multi: true,
               val: (v: any) => (Array.isArray(v) ? v.join("\n") : v) },
             { k: "ingredients", l: "Ingredients (comma-separated)", tid: "edit-ingredients",
               val: (v: any) => (Array.isArray(v) ? v.join(", ") : v) },
-          ].map((f: any) => {
-            if (f.k === "image") {
-              return (
-                <View key={f.k}>
-                  <Text style={styles.label}>{f.l}</Text>
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    <TextInput
-                      testID={f.tid}
-                      value={String((p as any).image ?? "")}
-                      onChangeText={(v) => setField("image" as any, v)}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      editable
-                      placeholder="Paste a URL or tap Upload"
-                      placeholderTextColor={theme.colors.mutedText}
-                      style={[styles.input, { flex: 1 }]}
-                    />
-                    <Pressable
-                      testID="upload-image-btn"
-                      onPress={uploadImage}
-                      disabled={uploading}
-                      style={[styles.addBtn, { paddingHorizontal: 12, alignSelf: "stretch" }]}
-                    >
-                      {uploading ? <ActivityIndicator color="#fff" /> : (
-                        <>
-                          <Feather name="upload" size={14} color="#fff" />
-                          <Text style={styles.addBtnText}>Upload</Text>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            }
-            return (
-              <View key={f.k}>
-                <Text style={styles.label}>{f.l}</Text>
-                <TextInput
-                  testID={f.tid}
-                  value={f.val ? f.val((p as any)[f.k]) : String((p as any)[f.k] ?? "")}
-                  onChangeText={(v) => setField(f.k as any, v)}
-                  multiline={f.multi}
-                  keyboardType={(f as any).kbd}
-                  placeholderTextColor={theme.colors.mutedText}
-                  style={[styles.input, f.multi && { minHeight: 70, textAlignVertical: "top" }]}
-                />
-              </View>
-            );
-          })}
-          {p.image ? (
-            <View>
-              <Text style={styles.label}>Preview</Text>
-              <Image
-                source={p.image}
-                style={{ width: "100%", height: 180, borderRadius: 12, marginTop: 6, backgroundColor: theme.colors.brandTertiary }}
-                contentFit="cover"
-                onError={() => setMsg("Image URL did not load. Check the link or Upload directly.")}
+          ].map((f: any) => (
+            <View key={f.k}>
+              <Text style={styles.label}>{f.l}</Text>
+              <TextInput
+                testID={f.tid}
+                value={f.val ? f.val((p as any)[f.k]) : String((p as any)[f.k] ?? "")}
+                onChangeText={(v) => setField(f.k as any, v)}
+                multiline={f.multi}
+                keyboardType={(f as any).kbd}
+                placeholderTextColor={theme.colors.mutedText}
+                style={[styles.input, f.multi && { minHeight: 70, textAlignVertical: "top" }]}
               />
             </View>
-          ) : null}
+          ))}
+
+          {/* ---------- Multi-image gallery (up to 5) ---------- */}
+          <Text style={[styles.label, { marginTop: 6 }]}>Images ({getImages().length}/5)</Text>
+          <Text style={styles.hint}>Add up to 5 photos. The first one is used as the main image everywhere.</Text>
+
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+            {getImages().map((img, idx) => (
+              <View key={`${img}-${idx}`} style={styles.imgSlot} testID={`img-slot-${idx}`}>
+                <Image source={img} style={styles.imgSlotPic} contentFit="cover" />
+                {idx === 0 ? (
+                  <View style={styles.primaryBadge}>
+                    <Feather name="star" size={10} color="#fff" />
+                    <Text style={styles.primaryBadgeText}>MAIN</Text>
+                  </View>
+                ) : null}
+                <View style={styles.imgSlotActions}>
+                  {idx > 0 ? (
+                    <Pressable
+                      testID={`img-primary-${idx}`}
+                      onPress={() => makePrimary(idx)}
+                      style={styles.imgActionBtn}
+                    >
+                      <Feather name="star" size={12} color="#fff" />
+                    </Pressable>
+                  ) : null}
+                  {idx > 0 ? (
+                    <Pressable
+                      testID={`img-left-${idx}`}
+                      onPress={() => moveImage(idx, idx - 1)}
+                      style={styles.imgActionBtn}
+                    >
+                      <Feather name="arrow-left" size={12} color="#fff" />
+                    </Pressable>
+                  ) : null}
+                  {idx < getImages().length - 1 ? (
+                    <Pressable
+                      testID={`img-right-${idx}`}
+                      onPress={() => moveImage(idx, idx + 1)}
+                      style={styles.imgActionBtn}
+                    >
+                      <Feather name="arrow-right" size={12} color="#fff" />
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    testID={`img-remove-${idx}`}
+                    onPress={() => removeImageAt(idx)}
+                    style={[styles.imgActionBtn, { backgroundColor: "rgba(208,119,103,0.95)" }]}
+                  >
+                    <Feather name="trash-2" size={12} color="#fff" />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+            {getImages().length < 5 ? (
+              <Pressable
+                testID="upload-image-btn"
+                onPress={uploadImage}
+                disabled={uploading}
+                style={styles.imgAdd}
+              >
+                {uploading ? (
+                  <ActivityIndicator color={theme.colors.brand} />
+                ) : (
+                  <>
+                    <Feather name="plus" size={22} color={theme.colors.brand} />
+                    <Text style={styles.imgAddText}>Add photo</Text>
+                  </>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+
+          <Text style={[styles.label, { marginTop: 10 }]}>Or paste an image URL</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TextInput
+              testID="edit-image-url"
+              value={urlInput}
+              onChangeText={setUrlInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="https://..."
+              placeholderTextColor={theme.colors.mutedText}
+              style={[styles.input, { flex: 1 }]}
+            />
+            <Pressable
+              testID="add-image-url"
+              onPress={addFromUrl}
+              disabled={getImages().length >= 5}
+              style={[styles.addBtn, { paddingHorizontal: 12, alignSelf: "stretch", opacity: getImages().length >= 5 ? 0.5 : 1 }]}
+            >
+              <Feather name="link" size={14} color="#fff" />
+              <Text style={styles.addBtnText}>Add</Text>
+            </Pressable>
+          </View>
+
           {msg ? <Text style={[styles.msg, msg.includes("Saved") && { color: theme.colors.brand }]}>{msg}</Text> : null}
           <Pressable testID="save-product" onPress={save} disabled={busy} style={[styles.cta, { marginTop: 16 }]}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>{p.id ? "Save Changes" : "Create Product"}</Text>}

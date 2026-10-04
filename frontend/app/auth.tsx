@@ -27,12 +27,12 @@ export default function AuthScreen() {
   return (
     <View style={styles.root} testID="auth-screen">
       <Image
-        source="https://images.pexels.com/photos/30946766/pexels-photo-30946766.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=900&w=720"
+        source="https://images.unsplash.com/photo-1760507976180-dfe07dfe5296?fm=jpg&q=80&w=900&fit=crop"
         style={StyleSheet.absoluteFill}
         contentFit="cover"
       />
       <LinearGradient
-        colors={["rgba(11,31,20,0.55)", "rgba(11,31,20,0.9)"]}
+        colors={["rgba(11,31,20,0.45)", "rgba(11,31,20,0.95)"]}
         style={StyleSheet.absoluteFill}
       />
       <LeafBackground density={16} intensity="vivid" />

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState , useMemo} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Dimensions,
+  FlatList, type NativeScrollEvent, type NativeSyntheticEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
@@ -11,7 +12,7 @@ import { useTheme, type Theme } from "@/src/theme";
 
 type Product = {
   id: string; name: string; tagline: string; description: string; price: number;
-  image: string; category: string; benefits: string[]; ingredients: string[];
+  image: string; images?: string[]; category: string; benefits: string[]; ingredients: string[];
   avg_rating: number; rating_count: number; in_stock?: boolean;
 };
 type Review = { id: string; rating: number; comment: string; user_name: string; created_at: string };
@@ -19,12 +20,15 @@ type Review = { id: string; rating: number; comment: string; user_name: string; 
 export default function ProductDetail() {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  const screenW = Dimensions.get("window").width;
 
   const { id } = useLocalSearchParams<{ id: string }>();
   const [p, setP] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [heroIdx, setHeroIdx] = useState(0);
+  const heroRef = useRef<FlatList<string>>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -57,6 +61,12 @@ export default function ProductDetail() {
     );
   }
 
+  const gallery = (p.images && p.images.length > 0 ? p.images : (p.image ? [p.image] : []));
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const i = Math.round(e.nativeEvent.contentOffset.x / screenW);
+    if (i !== heroIdx) setHeroIdx(i);
+  };
+
   return (
     <SafeAreaView style={styles.root} edges={["top"]} testID="product-detail">
       <View style={styles.headerBar}>
@@ -69,7 +79,37 @@ export default function ProductDetail() {
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
         <View style={styles.heroBg}>
-          <Image source={p.image} style={styles.heroImg} contentFit="cover" />
+          {gallery.length === 0 ? (
+            <View style={styles.heroImgEmpty}><Feather name="image" size={32} color={theme.colors.mutedText} /></View>
+          ) : (
+            <>
+              <FlatList
+                ref={heroRef}
+                data={gallery}
+                keyExtractor={(u, i) => `${u}-${i}`}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={onScroll}
+                scrollEventThrottle={16}
+                renderItem={({ item }) => (
+                  <View style={{ width: screenW, alignItems: "center", justifyContent: "center" }}>
+                    <Image source={item} style={styles.heroImg} contentFit="cover" />
+                  </View>
+                )}
+              />
+              {gallery.length > 1 ? (
+                <View style={styles.dotsRow} pointerEvents="none">
+                  {gallery.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[styles.dot, i === heroIdx && styles.dotActive]}
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </>
+          )}
         </View>
         <View style={styles.content}>
           <Text style={styles.cat}>{p.category}</Text>
@@ -170,6 +210,16 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
     height: 360, alignItems: "center", justifyContent: "center",
   },
   heroImg: { width: "80%", height: "80%" },
+  heroImgEmpty: { width: 80, height: 80, alignItems: "center", justifyContent: "center" },
+  dotsRow: {
+    position: "absolute", bottom: 14, left: 0, right: 0,
+    flexDirection: "row", justifyContent: "center", gap: 6,
+  },
+  dot: {
+    width: 7, height: 7, borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.5)",
+  },
+  dotActive: { backgroundColor: "#fff", width: 20 },
   content: { padding: theme.spacing.lg, gap: theme.spacing.sm },
   cat: { fontSize: 11, color: theme.colors.brand, letterSpacing: 1, fontFamily: theme.font.text },
   name: { fontSize: 26, color: theme.colors.onSurface, fontFamily: theme.font.display, lineHeight: 30 },

@@ -119,6 +119,7 @@ class Product(BaseModel):
     description: str
     price: float  # in INR
     image: str
+    images: List[str] = []
     category: str
     benefits: List[str] = []
     ingredients: List[str] = []
@@ -279,12 +280,18 @@ async def list_products(category: Optional[str] = None):
 
 @api_router.get("/products/categories")
 async def categories():
-    # Admin-managed list, fallback to distinct from products
+    # Union of admin-managed list AND distinct categories from products,
+    # so no product ever gets hidden if its category isn't in the admin list.
     s = await db.settings.find_one({"key": "categories"}, {"_id": 0})
-    if s and isinstance(s.get("list"), list) and s["list"]:
-        return {"categories": ["All"] + s["list"]}
-    cats = await db.products.distinct("category")
-    return {"categories": ["All"] + sorted(cats)}
+    admin_list = s.get("list", []) if s else []
+    prod_cats = await db.products.distinct("category")
+    seen: set = set()
+    merged: List[str] = []
+    for c in list(admin_list) + sorted(prod_cats):
+        if c and c not in seen:
+            seen.add(c)
+            merged.append(c)
+    return {"categories": ["All"] + merged}
 
 
 @api_router.get("/products/{product_id}")
@@ -755,11 +762,36 @@ class ProductUpsertRequest(BaseModel):
     tagline: str = ""
     description: str = ""
     price: float
-    image: str
+    image: str = ""
+    images: List[str] = []
     category: str
     benefits: List[str] = []
     ingredients: List[str] = []
     in_stock: bool = True
+
+
+def _normalize_images(req_image: str, req_images: List[str]) -> tuple[str, List[str]]:
+    """Returns (primary_image, images_list) with:
+      - de-duplication while preserving order
+      - cap of 5
+      - primary = first non-empty url
+    Accepts either a legacy single `image` string or a new `images` array (or both).
+    """
+    seen: set = set()
+    out: List[str] = []
+    pool = list(req_images or [])
+    if req_image and req_image not in pool:
+        pool = [req_image] + pool
+    for u in pool:
+        u = (u or "").strip()
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        out.append(u)
+        if len(out) >= 5:
+            break
+    primary = out[0] if out else (req_image or "")
+    return primary, out
 
 
 @api_router.post("/admin/products")
@@ -768,6 +800,9 @@ async def admin_create_product(req: ProductUpsertRequest, authorization: Optiona
     pid = req.id or f"p_{uuid.uuid4().hex[:10]}"
     doc = req.model_dump()
     doc["id"] = pid
+    primary, imgs = _normalize_images(doc.get("image", ""), doc.get("images", []))
+    doc["image"] = primary
+    doc["images"] = imgs
     await db.products.update_one({"id": pid}, {"$set": doc}, upsert=True)
     return {"ok": True, "product": doc}
 
@@ -777,6 +812,9 @@ async def admin_update_product(product_id: str, req: ProductUpsertRequest, autho
     await require_admin(authorization)
     doc = req.model_dump()
     doc["id"] = product_id
+    primary, imgs = _normalize_images(doc.get("image", ""), doc.get("images", []))
+    doc["image"] = primary
+    doc["images"] = imgs
     await db.products.update_one({"id": product_id}, {"$set": doc}, upsert=True)
     return {"ok": True, "product": doc}
 
@@ -1175,11 +1213,20 @@ async def on_startup():
         _init_storage()
     except Exception as e:
         logger.warning(f"storage init at startup: {e}")
+    # Backfill: ensure every product has an `images` array derived from `image`.
+    try:
+        await db.products.update_many(
+            {"images": {"$exists": False}},
+            [{"$set": {"images": {"$cond": [{"$gt": [{"$strLenCP": {"$ifNull": ["$image", ""]}}, 0]}, ["$image"], []]}}}],
+        )
+    except Exception as e:
+        logger.warning(f"product images backfill failed: {e}")
     # Seed only if the product does NOT already exist — never overwrite user edits.
     for p in SAMPLE_PRODUCTS:
+        p_with_imgs = {**p, "images": [p["image"]]}
         await db.products.update_one(
             {"id": p["id"]},
-            {"$setOnInsert": p},
+            {"$setOnInsert": p_with_imgs},
             upsert=True,
         )
     # seed categories list from distinct if not already set

@@ -1,0 +1,46 @@
+{
+  "summary": "Backend-only testing of the new product-images gallery feature (up to 5 images per product). All 15 new tests PASS; full suite 86/87 pass. The single 'failure' is a STALE REGRESSION ASSERTION in test_avr_backend.py::TestCart::test_cart_flow (hard-coded subtotal 1247 for p_ashwagandha@499 + p_tulsi_tea@249) — the admin has since edited those seed products via the admin UI to 'Instant Henna Hair Pack' @250 and 'Ragi Porridge Mix' @180 (observed subtotal 680). This failure is actually POSITIVE EVIDENCE that the new `$setOnInsert` seed logic works: user edits survive restarts. Verified: (1) POST /api/admin/products accepts `images:[]`, dedupes (collapses duplicates in order), caps at 5 (7 inputs -> 5 kept, first 5), filters empty/whitespace strings, auto-populates primary `image = images[0]` when `image` is empty, and prepends legacy `image` into `images` when both are supplied. (2) PUT /api/admin/products/{id} applies the same normalization and allows legacy image-only product to grow to multiple images. (3) GET /api/products — every product has an `images` list (none missing). (4) GET /api/products/{id} returns `images`. (5) Startup backfill — Mongo check confirms zero products in DB without an `images` field. (6) Legacy seeded products end up with `images=[image]`. (7) GET /api/products/categories returns ['All', ...union(admin_list, distinct product cats)] — verified a brand-new product category not in the admin list appears in the response, and no distinct product category is missing. (8) Seed $setOnInsert idempotency — simulated restart by rerunning the exact startup seed statement after admin-editing p_tulsi_tea; the edited name was preserved. Regression smoke on auth / products / cart (functionally works, only prices stale) / orders / status_history / support / merchant / callmebot / admin categories / admins / stock / upload — all green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "N/A (test only)", "issue": "test_avr_backend.py::TestCart::test_cart_flow hard-codes seed prices (p_ashwagandha=499, p_tulsi_tea=249, expected subtotal=1247). Admins have since edited those products via /api/admin/products (which $setOnInsert now permits). Not a product bug — update the test to fetch live prices or seed its own test product."},
+      {"endpoint": "POST/PUT /api/admin/products", "issue": "No server-side rejection when caller sends >5 images or duplicates; silently truncated. OK per spec, but response does not surface what was dropped. Consider returning a `warnings` field for better admin UX."},
+      {"endpoint": "POST/PUT /api/admin/products", "issue": "Image URLs are not validated as URLs (any non-empty string passes). Low priority — admin-only endpoint. Also no length cap per URL."},
+      {"endpoint": "GET /api/products/categories", "issue": "Admin-managed order is preserved for cats that exist in admin list, but newly-discovered product categories are appended in `sorted()` order — may not match the admin's preferred ordering. Non-blocking."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_product_images.py",
+    "/app/test_reports/pytest/pytest_iteration_7.xml",
+    "/app/test_reports/pytest/pytest_iteration_7_images.xml"
+  ],
+  "action_items": [
+    "(Optional) Refactor test_avr_backend.py::TestCart::test_cart_flow to fetch product prices via GET /api/products/{id} rather than hard-coding seed prices, so it won't regress whenever admins edit seed products.",
+    "(Optional) Return a `warnings` field from POST/PUT /api/admin/products indicating how many duplicates/empties were stripped and how many images beyond the 5-cap were dropped.",
+    "(Optional) Basic URL validation (startswith http:// or /api/files/) on each image string."
+  ],
+  "critical_code_review_comments": [
+    "`_normalize_images` correctly order-preserves dedup, caps at 5, strips/filters empty strings, and uses legacy `image` as primary when prepended (lines 773-794).",
+    "Both POST and PUT admin product endpoints route through `_normalize_images` → consistent behavior.",
+    "Startup backfill uses an aggregation-pipeline update_many with $cond to only create `images=[image]` when image is non-empty (lines 1218-1221). Correct — avoids `images=['']` for truly image-less products.",
+    "Seed loop uses `$setOnInsert` + upsert (lines 1225-1231) — fully preserves admin edits on restart. Observed empirically: p_ashwagandha / p_tulsi_tea are now admin-edited and still intact.",
+    "GET /api/products/categories merges admin list first (preserving order) then sorted distinct product cats — union is correct; 'All' always prepended. Set-based de-dup keeps order.",
+    "Minor: `Product` pydantic model has `images: List[str] = []` default but mutable default is a known pydantic gotcha — in BaseModel v2 this is actually fine (field default is deep-copied), so no bug.",
+    "Minor: `_normalize_images` fallback `primary = req_image or ''` is unreachable in practice because req_image is only prepended into pool if truthy; `out[0]` will match. OK."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_product_images.py (new, 15 tests)"
+  ],
+  "success_rate": {"backend": "100% on new feature (15/15); 98.9% full suite (86/87) — the single failure is a stale hard-coded price assertion in a pre-existing regression test, not a product bug", "frontend": "N/A — skipped per request"},
+  "seed_data_creation": "Reused conftest.py session-scoped seeded_admin fixture. Each test inserts/deletes its own TEST_-prefixed product via Mongo in a try/finally. The seed-idempotency test snapshots and restores p_tulsi_tea so cleanup is deterministic.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Env var is EXPO_PUBLIC_BACKEND_URL. Run: `set -a && . /app/frontend/.env && set +a && pytest /app/backend/tests/ -v`. New feature tests live in test_avr_product_images.py (TestListProductsImages, TestAdminCreateProductImages, TestAdminUpdateProductImages, TestStartupBackfill, TestCategoriesUnion, TestSeedIdempotency). Note: p_ashwagandha and p_tulsi_tea in the live DB have been admin-renamed/repriced (Instant Henna Hair Pack ₹250, Ragi Porridge Mix ₹180) — this is EXPECTED now that seed uses $setOnInsert. test_avr_backend.py::TestCart::test_cart_flow still hard-codes the old prices (499/249) and will keep failing until refactored to fetch live prices. _normalize_images() is at backend/server.py:773 and is invoked by both POST and PUT admin product endpoints.",
+  "rca_of_issue": "The one failing regression test (TestCart::test_cart_flow expecting subtotal=1247) is caused by the admin having edited p_ashwagandha and p_tulsi_tea via /api/admin/products — which is now permissible across restarts thanks to the switch from $set to $setOnInsert in the startup seed loop. This is the intended behaviour. Fix is at the test layer (fetch live prices), not the product."
+}
