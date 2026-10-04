@@ -1,0 +1,312 @@
+{
+  "products": [
+    {
+      "id": "p_tulsi_tea",
+      "name": "Ragi Porridge Mix",
+      "tagline": "Ragi Porridge Mix 200gms",
+      "description": "https://youtube.com/shorts/4TMtvFQIkwc?si=oL2jLjBT6jpogBWh\n",
+      "price": 180.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/1f8d967ce4e34b79bf46d718e305373f.jpg?token=xhcPpHbHBAxZPep9gqMftg",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/1f8d967ce4e34b79bf46d718e305373f.jpg?token=xhcPpHbHBAxZPep9gqMftg"
+      ],
+      "category": "Powders",
+      "benefits": [
+        "Healthy Breakfast Meal",
+        "Nutritious for kids",
+        "Rich source of protein and calcium",
+        "Suitable for all groups incl babies and toddlers"
+      ],
+      "ingredients": [
+        "Rama Tulsi",
+        "Krishna Tulsi",
+        "Vana Tulsi"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_ashwagandha",
+      "name": "Instant Henna Hair Pack",
+      "tagline": "Instant Henna Hair Pack 200gms",
+      "description": "https://youtube.com/shorts/8IJ7WOEE77c?si=huoYpkWBGvKaX6e7\n",
+      "price": 250.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/948061cbfe444474afa40514f02e23e7.jpg?token=a5n0Mr7jaBYAf3QD8V0vHA",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/948061cbfe444474afa40514f02e23e7.jpg?token=a5n0Mr7jaBYAf3QD8V0vHA"
+      ],
+      "category": "Mix",
+      "benefits": [
+        "1. Hair Conditioning",
+        "2. Grey Hair Coverage",
+        "3. Instant shine",
+        "4. Promotes hair growth",
+        "5. Hair follicles become strong"
+      ],
+      "ingredients": [
+        "Henna leaf Extract"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_neem_caps",
+      "name": "Beetroot Lipbalm",
+      "tagline": "Beetroot Lipbalm",
+      "description": "https://youtube.com/shorts/aQh237sXxyg?si=178javA_R9oHRxBw\n",
+      "price": 150.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/83d766fb0721427e86ddd0d3d96ca47e.jpg?token=Mu7JmvKQNpCBP8Tu5WCGpA",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/83d766fb0721427e86ddd0d3d96ca47e.jpg?token=Mu7JmvKQNpCBP8Tu5WCGpA"
+      ],
+      "category": "Balms",
+      "benefits": [
+        "1. Moisturizes chapped lips",
+        "2. Makes lips soft & supple",
+        "3. Nourishes Lips",
+        "4. Long lasting moisturization",
+        "5. Gives natural pink glow",
+        "6. Can also be used as a cheek tint"
+      ],
+      "ingredients": [
+        "Beetroot Extract"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_turmeric",
+      "name": "Herbal Hair Oil",
+      "tagline": "Herbal Hair Oil 200ml",
+      "description": "https://youtube.com/shorts/EU0-kP-TSAo?si=55yQhOVXmgp_BKLO\n",
+      "price": 300.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/a61ed1045a114f5e95c16f8931dfa768.jpg?token=P9YmMr1gmfsFj2HcQ6zNkQ",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/a61ed1045a114f5e95c16f8931dfa768.jpg?token=P9YmMr1gmfsFj2HcQ6zNkQ"
+      ],
+      "category": "Oil",
+      "benefits": [
+        "High-potency turmeric with 95% curcuminoids and black pepper for maximum absorption"
+      ],
+      "ingredients": [
+        "Coconut and herbs"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_chamomile",
+      "name": "Pure Henna Powder",
+      "tagline": "Pure Henna Powder 200gms",
+      "description": "Henna Leaves are delivered from Rajasthan (its origin)  50gms-75Rs,100gms-125Rs,200gms-200Rs,250gms-250",
+      "price": 125.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/1b3d91712b6042d68565af87eb37cbfb.jpg?token=bfTNqFK-0FX83TfEcVNYfw",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/1b3d91712b6042d68565af87eb37cbfb.jpg?token=bfTNqFK-0FX83TfEcVNYfw"
+      ],
+      "category": "Powders",
+      "benefits": [
+        "dried and grinded into fine powder to get the rich copper look for your hair. Which would turn out to be a natural hair colour"
+      ],
+      "ingredients": [
+        "Henna Leaves"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_brahmi_oil",
+      "name": "Facial Bombs",
+      "tagline": "Facial Bombs",
+      "description": "Traditional cold-pressed brahmi oil enriched with bhringraj and amla for hair growth and scalp nourishment.",
+      "price": 5.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/f21db0ccb1ae4fbab5a48826cf064790.jpg?token=t_Jhm1rRKKBwHEQj6kdRBQ",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/f21db0ccb1ae4fbab5a48826cf064790.jpg?token=t_Jhm1rRKKBwHEQj6kdRBQ"
+      ],
+      "category": "Balms",
+      "benefits": [
+        "Apply on to your face and massage for 5 minutes to get instant glow on your face"
+      ],
+      "ingredients": [
+        "Fruit extracts"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_giloy",
+      "name": "Saffron Gel",
+      "tagline": "Saffron Gel",
+      "description": "Saffron Gel\n",
+      "price": 120.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/123312bdf02b4f4791082a369e81f98f.jpg?token=UxpLw_oways2CXb09y-GAA",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/123312bdf02b4f4791082a369e81f98f.jpg?token=UxpLw_oways2CXb09y-GAA"
+      ],
+      "category": "Gels",
+      "benefits": [
+        "Saffron Gel"
+      ],
+      "ingredients": [
+        "Saffron Gel"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_triphala",
+      "name": "Red Wine Gel",
+      "tagline": "Red Wine Gel",
+      "description": "Red Wine Gel",
+      "price": 90.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/98dc7e7388d94d868c607d8ce9b2fa22.jpg?token=2G9vYzJ0lpNaJwdS0YAopg",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/98dc7e7388d94d868c607d8ce9b2fa22.jpg?token=2G9vYzJ0lpNaJwdS0YAopg"
+      ],
+      "category": "Gels",
+      "benefits": [
+        "Red Wine Gel"
+      ],
+      "ingredients": [
+        "Red Wine Gel"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_dc552c2a70",
+      "name": "Aloe Vera Gel",
+      "tagline": "Aloe Vera Gel",
+      "description": "Aloe Vera Gel\n",
+      "price": 75.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/48aeb914fb324821af31cee2c0618f17.jpg?token=cL13qjyr7iqkYxcxiD7GGg",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/48aeb914fb324821af31cee2c0618f17.jpg?token=cL13qjyr7iqkYxcxiD7GGg"
+      ],
+      "category": "Gels",
+      "benefits": [
+        "Aloe Vera Gel"
+      ],
+      "ingredients": [
+        "Aloe Vera Gel"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_2aca3995eb",
+      "name": "Herbal Bath Powder",
+      "tagline": "Price is for 250gms-250Rs,200gms-200Rs,100gms-125,50gms-75",
+      "description": "https://youtube.com/shorts/xbNkoEK9dGg?si=VBLPgDuCPMOij7A8\n",
+      "price": 250.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/8c608892f49f4f059af7c499e87223d1.jpg?token=b1aQUJR377FMHijSTOXjjQ",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/8c608892f49f4f059af7c499e87223d1.jpg?token=b1aQUJR377FMHijSTOXjjQ"
+      ],
+      "category": "Powders",
+      "benefits": [
+        "1. Reduces Tan & body odour",
+        "2. Increases Skin complexion",
+        "3. Gives natural glow to the skin",
+        "4. Reduces skin blemishes",
+        "5. Acts as cleanser"
+      ],
+      "ingredients": [
+        "made with 30 types of herbs and ingredients!!"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_bda1ed76b0",
+      "name": "Vatha Kuzhambu Paste",
+      "tagline": "Vatha Kuzhambu Paste",
+      "description": "https://youtube.com/shorts/m4HI4e8oZeQ?si=OXKCERO-l2ucsGzt\n",
+      "price": 90.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/7810c50b4ee44e8982895c9c83221336.jpg?token=NFZcd5DuhA93kdCJ-L1kug",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/7810c50b4ee44e8982895c9c83221336.jpg?token=NFZcd5DuhA93kdCJ-L1kug"
+      ],
+      "category": "Mix",
+      "benefits": [],
+      "ingredients": [
+        "Homemade Vatha Kuzhambu Paste- can be used as instant rice paste or as accompaniment for idly / dosa/ curd rice"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_d752172b97",
+      "name": "Tomato Pickle",
+      "tagline": "Tomato Pickle",
+      "description": "Drooling Tomato pickle to satisfy ur taste buds\n",
+      "price": 75.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/4b122f16877e4486a5860cc2e76d753a.jpg?token=u3yYiVz8VdsCEhxRIOjxZQ",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/4b122f16877e4486a5860cc2e76d753a.jpg?token=u3yYiVz8VdsCEhxRIOjxZQ"
+      ],
+      "category": "Mix",
+      "benefits": [],
+      "ingredients": [
+        "Pure Country Tomato"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_1ee5497d41",
+      "name": "Forest Honey",
+      "tagline": "Forest Honey-500gms",
+      "description": "Forest Honey collected from Rainforest of Dandeli & Anshi Natural Sacntury",
+      "price": 700.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/e79a229c68594fc6bce8db11ea593604.jpg?token=VnOfEqX5wDulepcbGqiebw",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/e79a229c68594fc6bce8db11ea593604.jpg?token=VnOfEqX5wDulepcbGqiebw"
+      ],
+      "category": "Honey",
+      "benefits": [
+        "Weightless, Sweetener, Skin glow"
+      ],
+      "ingredients": [
+        "Purest Form of Forest Honey"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_fc1b18921e",
+      "name": "Herbal Hair wash powder-250gms",
+      "tagline": "50gms-75Rs,100gms-100Rs,200gms-200Rs,250gms-250Rs",
+      "description": "Herbal Hair wash powder",
+      "price": 250.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/f366d8b92ffa43918963b494a4364f3e.jpg?token=bFvGKBgiB72ndlcKiRdZaQ",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/f366d8b92ffa43918963b494a4364f3e.jpg?token=bFvGKBgiB72ndlcKiRdZaQ"
+      ],
+      "category": "Powders",
+      "benefits": [
+        "Complete Hair wash without drying the scalp"
+      ],
+      "ingredients": [
+        "Shika and Henna Mix"
+      ],
+      "in_stock": true
+    },
+    {
+      "id": "p_b7a80c5007",
+      "name": "Roasted Nuts and seeds pack 100gms",
+      "tagline": "Roasted Nuts and seeds pack 100gms",
+      "description": "",
+      "price": 150.0,
+      "image": "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/58cbc5d3b2ef416bbd3c9dd9bbd4bc25.png?token=RhjWa4III0rfwM0mDkylTQ",
+      "images": [
+        "https://nature-store-hub-1.preview.emergentagent.com/api/files/avr-organics/uploads/user_a0443dda4870/58cbc5d3b2ef416bbd3c9dd9bbd4bc25.png?token=RhjWa4III0rfwM0mDkylTQ"
+      ],
+      "category": "Others",
+      "benefits": [
+        "Supports Heathy Skin and Hair"
+      ],
+      "ingredients": [
+        "Badam Pumpkin Flax sunflower"
+      ],
+      "in_stock": true
+    }
+  ],
+  "categories": [
+    "Balms",
+    "Mix",
+    "Oil",
+    "Powders",
+    "Honey",
+    "Gels",
+    "Others"
+  ]
+}

@@ -129,6 +129,67 @@ export default function AdminScreen() {
   const [cmbMsg, setCmbMsg] = useState("");
   const [savingSupport, setSavingSupport] = useState(false);
   const [msg, setMsg] = useState("");
+  // Bulk Import (dev → prod sync)
+  const [showImport, setShowImport] = useState(false);
+  const [importJson, setImportJson] = useState("");
+  const [importOverwrite, setImportOverwrite] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+
+  // Export dev products → copyable JSON blob
+  const [showExport, setShowExport] = useState(false);
+  const [exportJson, setExportJson] = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  const runExport = async () => {
+    setExporting(true);
+    try {
+      const r = await api<{ products: any[]; categories: string[]; count: number }>("/admin/products/export", { auth: true });
+      const payload = { products: r.products, categories: r.categories };
+      setExportJson(JSON.stringify(payload, null, 2));
+      setShowExport(true);
+    } catch (e: any) {
+      setImportMsg(e?.message ?? "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const copyExport = async () => {
+    try {
+      const Clipboard = await import("expo-clipboard");
+      await Clipboard.setStringAsync(exportJson);
+      setImportMsg("JSON copied to clipboard!");
+      setTimeout(() => setImportMsg(""), 2500);
+    } catch {
+      setImportMsg("Could not auto-copy — manually select & copy below");
+    }
+  };
+
+  const runImport = async () => {
+    setImporting(true);
+    setImportMsg("");
+    try {
+      const raw = importJson.trim();
+      if (!raw) { setImportMsg("Paste the JSON first"); return; }
+      let payload: any;
+      try { payload = JSON.parse(raw); } catch { setImportMsg("Invalid JSON"); return; }
+      const products: any[] = Array.isArray(payload) ? payload : (payload.products || []);
+      const categories: any[] = Array.isArray(payload?.categories) ? payload.categories : [];
+      if (products.length === 0) { setImportMsg("No products found in JSON"); return; }
+      const r = await api<{ imported: number; skipped_existing: number; overwritten: number; errors: string[] }>(
+        "/admin/products/bulk-import",
+        { method: "POST", auth: true, body: { products, categories, overwrite: importOverwrite } },
+      );
+      setImportMsg(`Imported ${r.imported} · Overwritten ${r.overwritten} · Skipped ${r.skipped_existing}${r.errors.length ? ` · ${r.errors.length} errors` : ""}`);
+      await load();
+      if (r.imported > 0 || r.overwritten > 0) setImportJson("");
+    } catch (e: any) {
+      setImportMsg(e?.message ?? "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     const [pr, s, c, a, mi, cmb] = await Promise.all([
@@ -566,18 +627,108 @@ export default function AdminScreen() {
 
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: theme.spacing.lg }}>
             <Text style={styles.section}>Products ({products.length})</Text>
-            <Pressable
-              testID="add-product-button"
-              onPress={() => setEditing({
-                id: "", name: "", tagline: "", description: "", price: 0, image: "", images: [],
-                category: "Capsules", benefits: [], ingredients: [], in_stock: true,
-              })}
-              style={styles.addBtn}
-            >
-              <Feather name="plus" size={16} color="#fff" />
-              <Text style={styles.addBtnText}>New</Text>
-            </Pressable>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable
+                testID="bulk-export-btn"
+                onPress={runExport}
+                disabled={exporting}
+                style={[styles.addBtn, { backgroundColor: theme.colors.surfaceSecondary, borderWidth: 1, borderColor: theme.colors.brand }]}
+              >
+                {exporting ? <ActivityIndicator color={theme.colors.brand} size="small" /> : <Feather name="upload" size={14} color={theme.colors.brand} />}
+                <Text style={[styles.addBtnText, { color: theme.colors.brand }]}>Export</Text>
+              </Pressable>
+              <Pressable
+                testID="bulk-import-btn"
+                onPress={() => setShowImport((v) => !v)}
+                style={[styles.addBtn, { backgroundColor: theme.colors.surfaceSecondary, borderWidth: 1, borderColor: theme.colors.brand }]}
+              >
+                <Feather name="download" size={14} color={theme.colors.brand} />
+                <Text style={[styles.addBtnText, { color: theme.colors.brand }]}>Import</Text>
+              </Pressable>
+              <Pressable
+                testID="add-product-button"
+                onPress={() => setEditing({
+                  id: "", name: "", tagline: "", description: "", price: 0, image: "", images: [],
+                  category: "Capsules", benefits: [], ingredients: [], in_stock: true,
+                })}
+                style={styles.addBtn}
+              >
+                <Feather name="plus" size={16} color="#fff" />
+                <Text style={styles.addBtnText}>New</Text>
+              </Pressable>
+            </View>
           </View>
+
+          {showImport ? (
+            <View style={styles.card}>
+              <Text style={styles.label}>Bulk Import — paste JSON</Text>
+              <Text style={styles.hint}>
+                Paste a products JSON here to copy them from your dev preview into this environment. Existing products with the same name are skipped unless Overwrite is on.
+              </Text>
+              <TextInput
+                testID="import-json-input"
+                value={importJson}
+                onChangeText={setImportJson}
+                multiline
+                numberOfLines={6}
+                placeholder='{"products": [...], "categories": [...]}'
+                placeholderTextColor={theme.colors.mutedText}
+                style={[styles.input, { minHeight: 120, textAlignVertical: "top", fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", fontSize: 11 }]}
+              />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+                <Pressable
+                  testID="import-overwrite-toggle"
+                  onPress={() => setImportOverwrite((v) => !v)}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <View style={{
+                    width: 18, height: 18, borderRadius: 4,
+                    borderWidth: 1.5, borderColor: theme.colors.brand,
+                    alignItems: "center", justifyContent: "center",
+                    backgroundColor: importOverwrite ? theme.colors.brand : "transparent",
+                  }}>
+                    {importOverwrite ? <Feather name="check" size={12} color="#fff" /> : null}
+                  </View>
+                  <Text style={{ color: theme.colors.onSurface, fontFamily: theme.font.text, fontSize: 12 }}>
+                    Overwrite existing
+                  </Text>
+                </Pressable>
+                <View style={{ flex: 1 }} />
+                <Pressable testID="run-import-btn" onPress={runImport} disabled={importing} style={[styles.cta, { paddingVertical: 10, paddingHorizontal: 16 }]}>
+                  {importing ? <ActivityIndicator color="#fff" /> : <Text style={[styles.ctaText, { fontSize: 13 }]}>Import now</Text>}
+                </Pressable>
+              </View>
+              {importMsg ? (
+                <Text style={[styles.msg, importMsg.startsWith("Imported") && { color: theme.colors.brand }]}>{importMsg}</Text>
+              ) : null}
+            </View>
+          ) : null}
+
+          {showExport ? (
+            <View style={styles.card}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={styles.label}>Exported JSON ({products.length} products)</Text>
+                <Pressable onPress={() => setShowExport(false)} style={styles.catBtn}>
+                  <Feather name="x" size={14} color={theme.colors.mutedText} />
+                </Pressable>
+              </View>
+              <Text style={styles.hint}>
+                Tap Copy, then paste into the Import box on your APK (production) and tap Import now.
+              </Text>
+              <TextInput
+                testID="export-json-output"
+                value={exportJson}
+                editable={false}
+                multiline
+                style={[styles.input, { minHeight: 140, textAlignVertical: "top", fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace", fontSize: 10 }]}
+              />
+              <Pressable testID="copy-export-btn" onPress={copyExport} style={[styles.cta, { marginTop: 8 }]}>
+                <Feather name="copy" size={14} color="#fff" />
+                <Text style={styles.ctaText}>  Copy to clipboard</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {products.map((p) => (
             <View key={p.id} style={styles.pCard} testID={`admin-product-${p.id}`}>
               <Image source={p.image} style={styles.pThumb} contentFit="cover" />

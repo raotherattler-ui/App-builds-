@@ -819,6 +819,90 @@ async def admin_update_product(product_id: str, req: ProductUpsertRequest, autho
     return {"ok": True, "product": doc}
 
 
+# ---------- Admin: Bulk Export / Import (dev → prod sync) ----------
+class ProductsBulkImportRequest(BaseModel):
+    products: List[dict]
+    categories: Optional[List[str]] = None
+    overwrite: bool = False  # if True, overwrite existing by id/name
+
+
+@api_router.get("/admin/products/export")
+async def admin_export_products(authorization: Optional[str] = Header(None)):
+    """Export every product + category to JSON — paste into another environment's bulk-import."""
+    await require_admin(authorization)
+    products = await db.products.find({}, {"_id": 0}).to_list(1000)
+    s = await db.settings.find_one({"key": "categories"}, {"_id": 0})
+    cats = (s or {}).get("list", []) if s else []
+    return {"products": products, "categories": cats, "count": len(products)}
+
+
+@api_router.post("/admin/products/bulk-import")
+async def admin_bulk_import(req: ProductsBulkImportRequest, authorization: Optional[str] = Header(None)):
+    """Import products in bulk. By default skips products that already exist (by id or name).
+    If overwrite=true, replaces matching ones."""
+    await require_admin(authorization)
+    imported = 0
+    skipped = 0
+    overwritten = 0
+    errors: List[str] = []
+    now = datetime.now(timezone.utc)
+
+    for raw in (req.products or []):
+        try:
+            if not isinstance(raw, dict) or not raw.get("name"):
+                errors.append(f"Invalid product entry: {raw}")
+                continue
+            pid = raw.get("id") or f"p_{uuid.uuid4().hex[:10]}"
+            doc = {
+                "id": pid,
+                "name": str(raw.get("name", "")).strip(),
+                "tagline": str(raw.get("tagline", "")),
+                "description": str(raw.get("description", "")),
+                "price": float(raw.get("price", 0) or 0),
+                "category": str(raw.get("category", "Others")),
+                "benefits": list(raw.get("benefits", []) or []),
+                "ingredients": list(raw.get("ingredients", []) or []),
+                "in_stock": bool(raw.get("in_stock", True)),
+            }
+            primary, imgs = _normalize_images(
+                str(raw.get("image", "") or ""),
+                list(raw.get("images", []) or []),
+            )
+            doc["image"] = primary
+            doc["images"] = imgs
+            doc["imported_at"] = now
+
+            existing = await db.products.find_one({"$or": [{"id": pid}, {"name": doc["name"]}]})
+            if existing:
+                if req.overwrite:
+                    await db.products.update_one({"id": existing["id"]}, {"$set": doc})
+                    overwritten += 1
+                else:
+                    skipped += 1
+                continue
+            await db.products.insert_one(doc)
+            imported += 1
+        except Exception as e:
+            errors.append(f"{raw.get('name', 'unknown')}: {e}")
+
+    # Merge in categories too
+    if req.categories:
+        current = await _get_categories_list()
+        for c in req.categories:
+            c = (c or "").strip()
+            if c and c not in current:
+                current.append(c)
+        await _set_categories_list(current)
+
+    return {
+        "ok": True,
+        "imported": imported,
+        "skipped_existing": skipped,
+        "overwritten": overwritten,
+        "errors": errors,
+    }
+
+
 @api_router.delete("/admin/products/{product_id}")
 async def admin_delete_product(product_id: str, authorization: Optional[str] = Header(None)):
     await require_admin(authorization)
