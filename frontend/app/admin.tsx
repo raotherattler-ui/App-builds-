@@ -166,6 +166,32 @@ export default function AdminScreen() {
     }
   };
 
+  // One-tap: fetch products directly from the dev preview URL and import them locally.
+  const DEV_SYNC_URL = "https://nature-store-hub-1.preview.emergentagent.com";
+  const pullFromDev = async () => {
+    setImporting(true);
+    setImportMsg("");
+    try {
+      const [pr, cr] = await Promise.all([
+        fetch(`${DEV_SYNC_URL}/api/products`).then((r) => r.json()),
+        fetch(`${DEV_SYNC_URL}/api/products/categories`).then((r) => r.json()),
+      ]);
+      const products = pr?.products || [];
+      const categories = (cr?.categories || []).filter((c: string) => c && c !== "All");
+      if (!products.length) { setImportMsg("Dev has no products to pull"); return; }
+      const r = await api<{ imported: number; skipped_existing: number; overwritten: number; errors: string[] }>(
+        "/admin/products/bulk-import",
+        { method: "POST", auth: true, body: { products, categories, overwrite: importOverwrite } },
+      );
+      setImportMsg(`Pulled from dev — Imported ${r.imported} · Overwritten ${r.overwritten} · Skipped ${r.skipped_existing}`);
+      await load();
+    } catch (e: any) {
+      setImportMsg(e?.message ?? "Pull failed");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const runImport = async () => {
     setImporting(true);
     setImportMsg("");
@@ -661,7 +687,22 @@ export default function AdminScreen() {
 
           {showImport ? (
             <View style={styles.card}>
-              <Text style={styles.label}>Bulk Import — paste JSON</Text>
+              <Text style={styles.label}>⚡ One-tap sync from dev preview</Text>
+              <Text style={styles.hint}>
+                Instantly pull all products + categories from your dev preview into this environment. No copy-paste needed.
+              </Text>
+              <Pressable testID="pull-from-dev-btn" onPress={pullFromDev} disabled={importing} style={[styles.cta, { marginTop: 6 }]}>
+                {importing ? <ActivityIndicator color="#fff" /> : (
+                  <>
+                    <Feather name="download-cloud" size={14} color="#fff" />
+                    <Text style={styles.ctaText}>  Pull all from dev preview</Text>
+                  </>
+                )}
+              </Pressable>
+
+              <View style={{ height: 1, backgroundColor: theme.colors.divider, marginVertical: 14 }} />
+
+              <Text style={styles.label}>Or paste JSON manually</Text>
               <Text style={styles.hint}>
                 Paste a products JSON here to copy them from your dev preview into this environment. Existing products with the same name are skipped unless Overwrite is on.
               </Text>
