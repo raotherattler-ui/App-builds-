@@ -1,8 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Linking, ScrollView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import * as Clipboard from "expo-clipboard";
 import { router, useLocalSearchParams } from "expo-router";
 import { useTheme, type Theme } from "@/src/theme";
 
@@ -14,9 +13,18 @@ export default function OrderSuccess() {
   }>();
   const isPending = pending === "1";
   const isUpi = !!upi;
+  const [copyMsg, setCopyMsg] = useState("");
 
   const copy = async (text: string) => {
-    try { await Clipboard.setStringAsync(text); } catch {}
+    try {
+      if (typeof navigator !== "undefined" && (navigator as any)?.clipboard?.writeText) {
+        await (navigator as any).clipboard.writeText(text);
+        setCopyMsg("Copied!");
+      } else {
+        setCopyMsg("Long-press the ID above to select and copy");
+      }
+      setTimeout(() => setCopyMsg(""), 2500);
+    } catch { setCopyMsg("Long-press to copy"); setTimeout(() => setCopyMsg(""), 2500); }
   };
 
   return (
@@ -41,11 +49,12 @@ export default function OrderSuccess() {
           <View style={styles.upiCard} testID="upi-details">
             <Text style={styles.upiLabel}>Merchant UPI ID</Text>
             <View style={styles.vpaRow}>
-              <Text style={styles.vpaText}>{vpa}</Text>
+              <Text style={styles.vpaText} selectable>{vpa}</Text>
               <Pressable testID="copy-vpa" onPress={() => copy(vpa)} style={styles.copyBtn}>
                 <Feather name="copy" size={14} color={theme.colors.brand} />
               </Pressable>
             </View>
+            {copyMsg ? <Text style={styles.webHint}>{copyMsg}</Text> : null}
             {Platform.OS !== "web" ? (
               <Pressable
                 testID="open-upi"

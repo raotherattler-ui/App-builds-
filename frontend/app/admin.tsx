@@ -156,13 +156,18 @@ export default function AdminScreen() {
   };
 
   const copyExport = async () => {
+    // Use the web Clipboard API on web; on native, prompt user to long-press-select the text below.
     try {
-      const Clipboard = await import("expo-clipboard");
-      await Clipboard.setStringAsync(exportJson);
-      setImportMsg("JSON copied to clipboard!");
-      setTimeout(() => setImportMsg(""), 2500);
+      // Web (Expo Go on browser)
+      if (typeof navigator !== "undefined" && (navigator as any)?.clipboard?.writeText) {
+        await (navigator as any).clipboard.writeText(exportJson);
+        setImportMsg("JSON copied to clipboard!");
+      } else {
+        setImportMsg("Long-press the JSON below → Select All → Copy");
+      }
+      setTimeout(() => setImportMsg(""), 3500);
     } catch {
-      setImportMsg("Could not auto-copy — manually select & copy below");
+      setImportMsg("Long-press the JSON below → Select All → Copy");
     }
   };
 
