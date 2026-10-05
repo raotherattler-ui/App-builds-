@@ -80,9 +80,7 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
-.env
-.env.*
-*.env
+# NOTE: .env files intentionally NOT ignored — Emergent deploy pipeline uses them for EXPO_PUBLIC_* injection
 credentials.json
 *.key
 .credentials

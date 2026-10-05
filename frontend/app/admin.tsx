@@ -172,8 +172,13 @@ export default function AdminScreen() {
   };
 
   // One-tap: fetch products directly from the dev preview URL and import them locally.
-  const DEV_SYNC_URL = "https://nature-store-hub-1.preview.emergentagent.com";
+  // Set EXPO_PUBLIC_DEV_SYNC_URL in frontend/.env to enable this flow in a given environment.
+  const DEV_SYNC_URL = process.env.EXPO_PUBLIC_DEV_SYNC_URL || "";
   const pullFromDev = async () => {
+    if (!DEV_SYNC_URL) {
+      setImportMsg("Dev sync URL not configured — paste JSON below instead.");
+      return;
+    }
     setImporting(true);
     setImportMsg("");
     try {

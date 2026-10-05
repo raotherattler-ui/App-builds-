@@ -105,6 +105,12 @@ def _get_object(path: str) -> tuple[bytes, str]:
     return r.content, r.headers.get("Content-Type", "application/octet-stream")
 
 app = FastAPI()
+
+
+@app.get("/health")
+async def health_root():
+    """Top-level health check for Kubernetes liveness/readiness probes."""
+    return {"status": "ok"}
 api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO)
@@ -1175,6 +1181,11 @@ async def admin_toggle_stock(product_id: str, req: StockToggleRequest, authoriza
 @api_router.get("/")
 async def root():
     return {"message": "Herbal Bloom API"}
+
+
+@api_router.get("/health")
+async def health_api():
+    return {"status": "ok"}
 
 
 # ---------- Seed sample products ----------
