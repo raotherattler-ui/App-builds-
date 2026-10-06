@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Switch, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, Switch, ActivityIndicator, Modal, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
@@ -24,6 +24,27 @@ export default function Profile() {
   const { user, signOut } = useAuth();
 
   const [recent, setRecent] = useState<Order[] | null>(null);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [confirmText, setConfirmText] = useState("");
+
+  const CONFIRM_WORD = "DELETE";
+
+  const confirmDeleteAccount = async () => {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await api("/auth/account", { method: "DELETE", auth: true });
+      setShowDelete(false);
+      await signOut();
+      router.replace("/auth");
+    } catch (e: any) {
+      setDeleteError(e?.message ?? "Could not delete account. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const loadRecent = useCallback(async () => {
     try {
@@ -157,7 +178,80 @@ export default function Profile() {
           <Feather name="log-out" size={16} color={theme.colors.error} />
           <Text style={styles.logoutText}>Sign Out</Text>
         </Pressable>
+
+        <Pressable
+          testID="delete-account-button"
+          onPress={() => { setConfirmText(""); setDeleteError(""); setShowDelete(true); }}
+          style={styles.dangerLink}
+        >
+          <Feather name="trash-2" size={14} color={theme.colors.error} />
+          <Text style={styles.dangerLinkText}>Delete my account</Text>
+        </Pressable>
       </ScrollView>
+
+      <Modal
+        visible={showDelete}
+        transparent
+        animationType="fade"
+        onRequestClose={() => (!deleting ? setShowDelete(false) : null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard} testID="delete-account-modal">
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <View style={styles.warnBubble}>
+                <Feather name="alert-triangle" size={16} color={theme.colors.error} />
+              </View>
+              <Text style={styles.modalTitle}>Delete your account?</Text>
+            </View>
+            <Text style={styles.modalBody}>
+              This permanently removes your profile, cart, and sign-in from avr organics.
+              {"\n\n"}
+              Your past orders are kept for accounting but your name, email, phone and address are scrubbed from them. Reviews stay but are shown as “Deleted user”.
+              {"\n\n"}
+              This action cannot be undone.
+            </Text>
+
+            <Text style={styles.modalLabel}>Type <Text style={{ fontWeight: "700" }}>{CONFIRM_WORD}</Text> to confirm</Text>
+            <TextInput
+              testID="delete-confirm-input"
+              value={confirmText}
+              onChangeText={setConfirmText}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              placeholder={CONFIRM_WORD}
+              placeholderTextColor={theme.colors.mutedText}
+              style={styles.modalInput}
+            />
+            {deleteError ? <Text style={styles.modalError}>{deleteError}</Text> : null}
+
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
+              <Pressable
+                testID="delete-cancel-btn"
+                disabled={deleting}
+                onPress={() => setShowDelete(false)}
+                style={[styles.modalBtn, { backgroundColor: theme.colors.surfaceSecondary, flex: 1 }]}
+              >
+                <Text style={[styles.modalBtnText, { color: theme.colors.onSurface }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                testID="delete-confirm-btn"
+                disabled={deleting || confirmText.trim().toUpperCase() !== CONFIRM_WORD}
+                onPress={confirmDeleteAccount}
+                style={[
+                  styles.modalBtn,
+                  {
+                    flex: 1,
+                    backgroundColor: theme.colors.error,
+                    opacity: deleting || confirmText.trim().toUpperCase() !== CONFIRM_WORD ? 0.5 : 1,
+                  },
+                ]}
+              >
+                {deleting ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalBtnText}>Delete forever</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -224,4 +318,37 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.colors.error,
   },
   logoutText: { color: theme.colors.error, fontFamily: theme.font.text },
+  dangerLink: {
+    flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6,
+    paddingVertical: 10, marginTop: 4,
+  },
+  dangerLinkText: { color: theme.colors.error, fontFamily: theme.font.text, fontSize: 13, textDecorationLine: "underline" },
+  modalBackdrop: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center", justifyContent: "center", padding: theme.spacing.lg,
+  },
+  modalCard: {
+    width: "100%", maxWidth: 420,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg, padding: theme.spacing.lg,
+  },
+  warnBubble: {
+    width: 32, height: 32, borderRadius: 999,
+    backgroundColor: "rgba(208,119,103,0.15)",
+    alignItems: "center", justifyContent: "center",
+  },
+  modalTitle: { fontSize: 17, color: theme.colors.onSurface, fontFamily: theme.font.display, flex: 1 },
+  modalBody: { fontSize: 13, lineHeight: 20, color: theme.colors.onSurface, fontFamily: theme.font.text, marginTop: 4 },
+  modalLabel: { fontSize: 12, color: theme.colors.mutedText, marginTop: 14, marginBottom: 6, fontFamily: theme.font.text },
+  modalInput: {
+    borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md,
+    paddingHorizontal: 12, paddingVertical: 10,
+    color: theme.colors.onSurface, fontFamily: theme.font.text, letterSpacing: 1,
+  },
+  modalError: { color: theme.colors.error, fontSize: 12, marginTop: 8, fontFamily: theme.font.text },
+  modalBtn: {
+    paddingVertical: 12, borderRadius: 999,
+    alignItems: "center", justifyContent: "center",
+  },
+  modalBtnText: { color: "#fff", fontFamily: theme.font.text, fontSize: 14 },
 });

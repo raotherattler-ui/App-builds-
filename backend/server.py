@@ -136,9 +136,10 @@ _PRIVACY_POLICY_TEXT = (
     "   • We share only what is needed with delivery partners and payment providers so your order can be completed.\n\n"
     "5. Data retention\n"
     "   • Order history is retained for accounting and warranty purposes.\n"
-    "   • You can request deletion of your account and personal data at any time (see Contact below).\n\n"
+    "   • You can delete your account and personal data at any time from the app (Profile → Delete my account). Past orders will be kept but your name, email, phone and address will be anonymised.\n\n"
     "6. Your rights\n"
     "   • Access your data, correct it, delete it, or restrict its use.\n"
+    "   • You may delete your account directly from the app (Profile → Delete my account) or by emailing us.\n"
     "   • Withdraw consent at any time by removing the app and emailing us to delete your account.\n\n"
     "7. Children\n"
     "   • The app is not intended for children under 13.\n\n"
@@ -335,6 +336,68 @@ async def auth_logout(authorization: Optional[str] = Header(None)):
         token = authorization.split(" ", 1)[1]
         await db.user_sessions.delete_one({"session_token": token})
     return {"ok": True}
+
+
+@api_router.delete("/auth/account")
+async def delete_account(authorization: Optional[str] = Header(None)):
+    """Permanently deletes the signed-in user's personal data (Play Store / App Store requirement).
+
+    What gets deleted immediately:
+      - User profile (`users` document)
+      - Cart contents (`carts` document)
+      - All active sessions (user is logged out everywhere)
+
+    What is anonymised (kept for accounting/tax but detached from the person):
+      - Past orders: `user_email`, `user_name`, `user_id`, `address` scrubbed
+      - Reviews: `user_name` replaced with "Deleted user"
+
+    Admin accounts cannot delete themselves this way — they must be de-admined first by another admin.
+    """
+    user = await get_current_user(authorization)
+    uid = user["user_id"]
+    email = user.get("email", "")
+
+    # Safety: last-admin lockout prevention
+    me_doc = await db.users.find_one({"user_id": uid})
+    if me_doc and me_doc.get("is_admin"):
+        remaining_admins = await db.users.count_documents({"is_admin": True, "user_id": {"$ne": uid}})
+        if remaining_admins == 0:
+            raise HTTPException(400, "You are the only admin. Promote another user to admin before deleting your account.")
+
+    # 1. Anonymise orders — never fully delete so sales records are intact
+    now_iso = datetime.now(timezone.utc)
+    await db.orders.update_many(
+        {"user_id": uid},
+        {
+            "$set": {
+                "user_email": "deleted@avr.local",
+                "user_name": "Deleted user",
+                "address": {
+                    "full_name": "Deleted user",
+                    "phone": "",
+                    "line1": "",
+                    "city": "",
+                    "state": "",
+                    "pincode": "",
+                },
+                "anonymised_at": now_iso,
+            },
+        },
+    )
+
+    # 2. Anonymise review author names (but keep ratings/comments for product integrity)
+    await db.reviews.update_many(
+        {"user_id": uid},
+        {"$set": {"user_name": "Deleted user", "anonymised_at": now_iso}},
+    )
+
+    # 3. Hard-delete cart + sessions + user profile
+    await db.carts.delete_many({"user_id": uid})
+    await db.user_sessions.delete_many({"user_id": uid})
+    await db.users.delete_one({"user_id": uid})
+
+    logger.info(f"Account deleted & anonymised for user_id={uid} email={email}")
+    return {"ok": True, "message": "Your account and personal data have been deleted."}
 
 
 # ---------- Products ----------

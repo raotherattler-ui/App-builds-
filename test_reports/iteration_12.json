@@ -1,0 +1,38 @@
+{
+  "summary": "Backend tested for new DELETE /api/auth/account endpoint. Found a CRITICAL bug (fixed in-place): the handler was querying/deleting by field name 'id' but users are stored with 'user_id' — meaning (a) user profile was NEVER actually deleted after a successful 200 response, and (b) last-admin lockout check was fully bypassed because me_doc always came back None. Fixed server.py:361,363,397 to use 'user_id'. All 12 new tests now pass (401 unauth, 200 happy-path, cart+session+user hard-delete, orders+reviews anonymised with correct scrubbed fields and anonymised_at timestamp, last-admin blocked with 400, non-last admin succeeds, privacy JSON+HTML mention 'Delete my account'). Full regression suite: 133/134 pass; 1 pre-existing failure in test_avr_backend.py::test_cart_flow (hardcoded subtotal 1247.0 vs actual 680.0 — unrelated to this feature, caused by product price edits in DB).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "DELETE /api/auth/account", "issue": "FIXED. Handler used {'id': uid} on users collection but documents use key 'user_id'. Result: user profile not deleted, last-admin check always skipped. Fix applied at server.py lines 361, 363, 397.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_delete_account.py",
+    "/app/test_reports/pytest/pytest_iteration_12.xml",
+    "/app/test_reports/pytest/pytest_iteration_12_full.xml"
+  ],
+  "action_items": [
+    "Please re-verify the delete_account fix end-to-end on the mobile UI (type-DELETE modal → DELETE /api/auth/account → sign-out → re-login still works).",
+    "Pre-existing: test_avr_backend.py::test_cart_flow has a hardcoded expected subtotal of 1247.0 that no longer matches current seeded product prices (actual 680.0). Update that fixture when convenient — not related to this iteration."
+  ],
+  "critical_code_review_comments": [
+    "server.py:361/363/397 used {'id': uid} on the users collection where all other code paths consistently use 'user_id' (e.g. lines 267, 296, 1148, 1161). This is a regression risk: add a lint/convention or model class to centralise the key.",
+    "delete_account updates orders then reviews then deletes user+sessions sequentially without a Mongo transaction. If the process is killed between step 2 and step 3, the user doc remains but data is already anonymised. Low-risk given single-doc writes, but worth noting."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (3 field-name fixes in delete_account)",
+    "/app/backend/tests/test_avr_delete_account.py (new, 12 tests)"
+  ],
+  "success_rate": {"backend": "100% (12/12 delete-account tests + 133/134 full suite; 1 unrelated pre-existing failure)", "frontend": "not tested (per request)"},
+  "seed_data_creation": "Tests seed their own TEST_-prefixed users, sessions, carts, orders and reviews directly in Mongo and clean up in finally blocks. No persistent seed data left behind.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "DELETE /api/auth/account is now fully working. New regression file: backend/tests/test_avr_delete_account.py covers: auth-required, happy path (hard-delete user+cart+sessions, anonymise orders+reviews, invalidate token), last-admin lockout (400), non-last admin success, privacy policy mentions 'Delete my account' in both JSON and HTML. Field-name convention across users collection is 'user_id' — if you add new user-scoped queries, use that key, never 'id'.",
+  "rca_of_issue": "RCA for the critical bug: In server.py delete_account(), three queries used {'id': uid} and {'id': {'$ne': uid}}. The users collection stores identity under 'user_id' (set at insert in auth_session, line 303). Consequences: (1) me_doc = find_one({'id': uid}) → None → is_admin branch skipped → last-admin lockout check never triggers. (2) count_documents({'is_admin': True, 'id': {'$ne': uid}}) → in Mongo, $ne against a missing field matches, so this returned the full admin count regardless, hiding the issue even if (1) had worked. (3) delete_one({'id': uid}) matched zero docs → user profile silently retained while the endpoint returned 200 ok. Reproduction: seed a user via conftest-style helper, DELETE /api/auth/account with their bearer token → response 200 but db.users.find_one({'user_id': uid}) still returns the doc. Mitigation applied: replace all three 'id' keys with 'user_id'. After fix, tests confirm (a) user doc removed, (b) sessions removed → /auth/me returns 401, (c) cart removed, (d) order anonymised with scrubbed address + anonymised_at, (e) review retained with rating/comment but user_name='Deleted user', (f) last-admin returns 400 with helpful message, (g) non-last admin deletion proceeds."
+}
