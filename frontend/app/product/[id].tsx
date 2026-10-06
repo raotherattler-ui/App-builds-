@@ -8,6 +8,7 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { api } from "@/src/lib/api";
+import { LinkifiedText } from "@/src/components/LinkifiedText";
 import { useTheme, type Theme } from "@/src/theme";
 
 type Product = {
@@ -127,7 +128,7 @@ export default function ProductDetail() {
           </View>
 
           <Text style={styles.price}>₹{p.price}</Text>
-          <Text style={styles.desc}>{p.description}</Text>
+          <LinkifiedText style={styles.desc}>{p.description}</LinkifiedText>
 
           {p.benefits?.length ? (
             <View style={styles.section}>
@@ -164,7 +165,7 @@ export default function ProductDetail() {
                       ))}
                     </View>
                   </View>
-                  {r.comment ? <Text style={styles.rTxt}>{r.comment}</Text> : null}
+                  {r.comment ? <LinkifiedText style={styles.rTxt}>{r.comment}</LinkifiedText> : null}
                 </View>
               ))
             )}
