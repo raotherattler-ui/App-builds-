@@ -1,0 +1,36 @@
+{
+  "summary": "Backend regression + feature tests for simplified Price List feature. Updated existing /api/pricelist public test to match new spec (keys 'categories', 'products', 'total_products' are REMOVED — only {images: [...]} now). Added 4 new tests: order preservation, Mongo settings-collection persistence, and 6 regression tests confirming untouched endpoints (/products, /products/categories, /privacy, /admin/products auth, /orders/me auth, /health). All 25 tests in test_avr_pricelist_and_cancel.py PASS. Full suite 158/159 (1 unrelated pre-existing failure in test_avr_backend.py::test_cart_flow — hardcoded subtotal 1247.0 vs actual 680.0, carried over from iteration 12). Price List feature works exactly as spec: GET /api/pricelist public → {images}, admin GET + PUT auth-gated (401 unauth, 403 non-admin), PUT enforces de-dupe + 5-cap + empty-filter + order-preservation + persists under settings.key='pricelist'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_pricelist_and_cancel.py",
+    "/app/test_reports/pytest/pytest_iteration_13.xml",
+    "/app/test_reports/pytest/pytest_iteration_13_full.xml"
+  ],
+  "action_items": [
+    "No action required for Price List feature — backend is correct and fully covered.",
+    "Pre-existing (carried over from iteration 12): test_avr_backend.py::test_cart_flow has a hardcoded expected subtotal of 1247.0 that no longer matches current seeded product prices (actual 680.0). Update that fixture when convenient — unrelated to this iteration."
+  ],
+  "critical_code_review_comments": [
+    "_clean_pricelist_images (server.py:1363) correctly dedupes, filters empties, caps at 5 and preserves order — same shape as _normalize_images for products, good consistency.",
+    "GET /api/pricelist double-sanitizes with _clean_pricelist_images on read even though PUT already sanitizes on write — safe defensive layer; also protects against DB tampering.",
+    "server.py file is now 1579 lines — approaching the 700-line split threshold. Consider splitting into routers (auth.py, products.py, orders.py, admin.py, pricelist.py) for maintainability, though not blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_pricelist_and_cancel.py (rewrote TestPricelistPublic to match new shape; added test_admin_put_preserves_order, test_pricelist_persists_in_settings_collection, and TestRegressionNoImpact class with 6 tests)"
+  ],
+  "success_rate": {"backend": "100% on feature (25/25 pricelist+cancel + 6 regression); 158/159 full suite — 1 unrelated pre-existing failure", "frontend": "not tested (per request)"},
+  "seed_data_creation": "Tests seed TEST_-prefixed users+sessions directly in Mongo via conftest fixtures and clean up in finally blocks. Pricelist settings are snapshotted before each mutating test and restored afterwards — no persistent state changes.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Price List is simplified: /api/pricelist returns ONLY {images: []}. Any attempt to re-introduce `categories`/`products`/`total_products` into this response will be caught by TestPricelistPublic::test_public_pricelist_no_auth. Admin writes via PUT /api/admin/pricelist/images with body {images:[url,...]} — handler calls _clean_pricelist_images (server.py:1363) which dedupes/trims/caps-at-5/preserves-order. Images are stored at settings.key='pricelist' (field name='images'). All 25 feature tests + 6 regression tests pass against the public preview URL.",
+  "rca_of_issue": "No new bug this iteration. Previously-existing failing test (test_cart_flow) has hardcoded product-price assertions that have drifted from the live seed data; it is unrelated to the Price List work."
+}

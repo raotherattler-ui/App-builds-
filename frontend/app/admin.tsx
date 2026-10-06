@@ -136,6 +136,59 @@ export default function AdminScreen() {
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
 
+  // Price List image gallery (up to 5)
+  const [plImages, setPlImages] = useState<string[]>([]);
+  const [plBusy, setPlBusy] = useState(false);
+  const [plMsg, setPlMsg] = useState("");
+
+  const loadPricelist = useCallback(async () => {
+    try {
+      const r = await api<{ images: string[] }>("/admin/pricelist", { auth: true });
+      setPlImages(r.images ?? []);
+    } catch { setPlImages([]); }
+  }, []);
+  useEffect(() => { loadPricelist(); }, [loadPricelist]);
+
+  const savePlImages = async (next: string[]) => {
+    const trimmed = next.slice(0, 5);
+    setPlImages(trimmed);
+    try {
+      const r = await api<{ images: string[] }>("/admin/pricelist/images", {
+        method: "PUT", auth: true, body: { images: trimmed },
+      });
+      setPlImages(r.images);
+      setPlMsg("Saved");
+      setTimeout(() => setPlMsg(""), 2000);
+    } catch (e: any) {
+      setPlMsg(e?.message ?? "Save failed");
+    }
+  };
+
+  const plUpload = async () => {
+    if (plImages.length >= 5) { setPlMsg("Max 5 images"); return; }
+    setPlBusy(true); setPlMsg("");
+    try {
+      const res = await pickAndUploadImage();
+      if (res?.url) await savePlImages([...plImages, res.url]);
+    } catch (e: any) {
+      setPlMsg(e?.message ?? "Upload failed");
+    } finally { setPlBusy(false); }
+  };
+
+  const plRemove = (idx: number) => {
+    const next = plImages.slice();
+    next.splice(idx, 1);
+    void savePlImages(next);
+  };
+
+  const plMove = (from: number, to: number) => {
+    if (to < 0 || to >= plImages.length) return;
+    const next = plImages.slice();
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    void savePlImages(next);
+  };
+
   // Export dev products → copyable JSON blob
   const [showExport, setShowExport] = useState(false);
   const [exportJson, setExportJson] = useState("");
@@ -589,6 +642,57 @@ export default function AdminScreen() {
             </View>
             <Text style={styles.hint}>The user must sign in once with Google before you can promote them.</Text>
             {adminMsg ? <Text style={[styles.msg, adminMsg.includes("Promoted") && { color: theme.colors.brand }]}>{adminMsg}</Text> : null}
+          </View>
+
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: theme.spacing.lg }}>
+            <Text style={styles.section}>Price List Images ({plImages.length}/5)</Text>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.hint}>
+              Upload up to 5 JPG/PNG banners or scanned price-sheet images. These appear at the top of the public Price List screen.
+            </Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
+              {plImages.map((url, i) => (
+                <View key={`${url}-${i}`} style={styles.imgSlot} testID={`pl-slot-${i}`}>
+                  <Image source={url} style={styles.imgSlotPic} contentFit="cover" />
+                  <View style={styles.imgSlotActions}>
+                    {i > 0 ? (
+                      <Pressable testID={`pl-left-${i}`} onPress={() => plMove(i, i - 1)} style={styles.imgActionBtn}>
+                        <Feather name="arrow-left" size={12} color="#fff" />
+                      </Pressable>
+                    ) : null}
+                    {i < plImages.length - 1 ? (
+                      <Pressable testID={`pl-right-${i}`} onPress={() => plMove(i, i + 1)} style={styles.imgActionBtn}>
+                        <Feather name="arrow-right" size={12} color="#fff" />
+                      </Pressable>
+                    ) : null}
+                    <Pressable
+                      testID={`pl-remove-${i}`}
+                      onPress={() => plRemove(i)}
+                      style={[styles.imgActionBtn, { backgroundColor: "rgba(208,119,103,0.95)" }]}
+                    >
+                      <Feather name="trash-2" size={12} color="#fff" />
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+              {plImages.length < 5 ? (
+                <Pressable
+                  testID="pl-upload-btn"
+                  onPress={plUpload}
+                  disabled={plBusy}
+                  style={styles.imgAdd}
+                >
+                  {plBusy ? <ActivityIndicator color={theme.colors.brand} /> : (
+                    <>
+                      <Feather name="plus" size={22} color={theme.colors.brand} />
+                      <Text style={styles.imgAddText}>Add image</Text>
+                    </>
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
+            {plMsg ? <Text style={[styles.msg, plMsg.startsWith("Saved") && { color: theme.colors.brand }]}>{plMsg}</Text> : null}
           </View>
 
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: theme.spacing.lg }}>

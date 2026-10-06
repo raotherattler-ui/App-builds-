@@ -93,9 +93,14 @@ export default function Home() {
           <Text style={styles.brand}>avr organics</Text>
           <Text style={styles.sub}>Nature&apos;s wisdom, delivered.</Text>
         </View>
-        <Pressable testID="support-icon" onPress={() => router.push("/support")} style={styles.supportBtn}>
-          <Feather name="help-circle" size={20} color={theme.colors.onSurface} />
-        </Pressable>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <Pressable testID="pricelist-icon" onPress={() => router.push("/pricelist")} style={styles.supportBtn}>
+            <Feather name="list" size={20} color="#9ACD32" />
+          </Pressable>
+          <Pressable testID="support-icon" onPress={() => router.push("/support")} style={styles.supportBtn}>
+            <Feather name="help-circle" size={20} color={theme.colors.onSurface} />
+          </Pressable>
+        </View>
       </View>
 
       {loading ? (

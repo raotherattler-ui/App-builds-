@@ -711,6 +711,33 @@ async def get_order(order_id: str, authorization: Optional[str] = Header(None)):
     return {"order": d}
 
 
+@api_router.post("/orders/{order_id}/cancel")
+async def user_cancel_order(order_id: str, authorization: Optional[str] = Header(None)):
+    """Customer-initiated cancellation. Allowed ONLY while the order is still pending (unpaid).
+    Once paid / shipped / delivered / already cancelled → 400."""
+    user = await get_current_user(authorization)
+    d = await db.orders.find_one({"id": order_id, "user_id": user["user_id"]})
+    if not d:
+        raise HTTPException(404, "Order not found")
+    current = (d.get("status") or "").lower()
+    if current != "pending":
+        raise HTTPException(400, f"This order can no longer be cancelled (current status: {current}).")
+    now = datetime.now(timezone.utc)
+    await db.orders.update_one(
+        {"id": order_id},
+        {
+            "$set": {"status": "cancelled", "cancelled_at": now},
+            "$push": {"status_history": {
+                "status": "cancelled",
+                "at": now,
+                "note": "Cancelled by customer",
+                "by": user.get("email", ""),
+            }},
+        },
+    )
+    return {"ok": True, "status": "cancelled"}
+
+
 # ---------- Reviews ----------
 @api_router.get("/products/{product_id}/reviews")
 async def get_reviews(product_id: str):
@@ -1326,6 +1353,53 @@ async def privacy_json():
         "contact_whatsapp": "+91 96773 37727",
         "text": _PRIVACY_POLICY_TEXT,
     }
+
+
+# ---------- Price List (public + admin manage) ----------
+class PriceListImagesRequest(BaseModel):
+    images: List[str] = []
+
+
+def _clean_pricelist_images(urls: List[str]) -> List[str]:
+    seen: set = set()
+    out: List[str] = []
+    for u in urls or []:
+        u = (u or "").strip()
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        out.append(u)
+        if len(out) >= 5:
+            break
+    return out
+
+
+@api_router.get("/pricelist")
+async def get_pricelist():
+    """Public endpoint — returns the admin-uploaded price-list images (up to 5)."""
+    s = await db.settings.find_one({"key": "pricelist"}, {"_id": 0}) or {}
+    images = _clean_pricelist_images(s.get("images", []) if isinstance(s.get("images"), list) else [])
+    return {"images": images}
+
+
+@api_router.get("/admin/pricelist")
+async def admin_get_pricelist(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    s = await db.settings.find_one({"key": "pricelist"}, {"_id": 0}) or {}
+    return {"images": _clean_pricelist_images(s.get("images", []) if isinstance(s.get("images"), list) else [])}
+
+
+@api_router.put("/admin/pricelist/images")
+async def admin_set_pricelist_images(req: PriceListImagesRequest, authorization: Optional[str] = Header(None)):
+    """Save up to 5 price-list banner/scan images. Pass the new ordered list each time."""
+    await require_admin(authorization)
+    images = _clean_pricelist_images(req.images)
+    await db.settings.update_one(
+        {"key": "pricelist"},
+        {"$set": {"key": "pricelist", "images": images}},
+        upsert=True,
+    )
+    return {"ok": True, "images": images}
 
 
 @api_router.get("/privacy.html", response_class=HTMLResponse)

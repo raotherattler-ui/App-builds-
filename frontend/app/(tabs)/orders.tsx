@@ -144,6 +144,33 @@ export default function Orders() {
     } catch {}
   };
 
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const [cancelMsg, setCancelMsg] = useState("");
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+
+  const doCancel = async (orderId: string) => {
+    setCancelling(orderId);
+    setCancelMsg("");
+    try {
+      await api(`/orders/${orderId}/cancel`, { method: "POST", auth: true });
+      setConfirmCancelId(null);
+      setCancelMsg("Order cancelled");
+      setTimeout(() => setCancelMsg(""), 2500);
+      await load();
+      if (detail?.id === orderId) {
+        try {
+          const r = await api<{ order: Order }>(`/orders/${orderId}`, { auth: true });
+          setDetail(r.order);
+        } catch { setDetail((d) => (d ? { ...d, status: "cancelled" } : d)); }
+      }
+    } catch (e: any) {
+      setCancelMsg(e?.message ?? "Could not cancel");
+      setTimeout(() => setCancelMsg(""), 3500);
+    } finally {
+      setCancelling(null);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.root} edges={["top"]} testID="orders-screen">
       <View style={styles.header}><Text style={styles.title}>My Orders</Text></View>
@@ -189,16 +216,28 @@ export default function Orders() {
               <Tracker status={item.status} theme={theme} />
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
                 <Text style={styles.total}>Total ₹{item.total.toFixed(2)}</Text>
-                {(item.status === "paid" || item.status === "shipped" || item.status === "delivered") && (
-                  <Pressable
-                    testID={`review-button-${item.id}`}
-                    onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: "/review", params: { orderId: item.id } }); }}
-                    style={styles.reviewBtn}
-                  >
-                    <Feather name="star" size={14} color={theme.colors.brand} />
-                    <Text style={styles.reviewBtnText}>Write Review</Text>
-                  </Pressable>
-                )}
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {item.status === "pending" ? (
+                    <Pressable
+                      testID={`cancel-order-${item.id}`}
+                      onPress={(e) => { e.stopPropagation?.(); setConfirmCancelId(item.id); }}
+                      style={styles.cancelBtn}
+                    >
+                      <Feather name="x-circle" size={14} color={theme.colors.error} />
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </Pressable>
+                  ) : null}
+                  {(item.status === "paid" || item.status === "shipped" || item.status === "delivered") && (
+                    <Pressable
+                      testID={`review-button-${item.id}`}
+                      onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: "/review", params: { orderId: item.id } }); }}
+                      style={styles.reviewBtn}
+                    >
+                      <Feather name="star" size={14} color={theme.colors.brand} />
+                      <Text style={styles.reviewBtnText}>Write Review</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
             </Pressable>
           )}
@@ -206,13 +245,60 @@ export default function Orders() {
       )}
 
       <Modal visible={!!detail} animationType="slide" onRequestClose={() => setDetail(null)} transparent={false}>
-        {detail ? <OrderDetailSheet order={detail} onClose={() => setDetail(null)} /> : null}
+        {detail ? (
+          <OrderDetailSheet
+            order={detail}
+            onClose={() => setDetail(null)}
+            onRequestCancel={() => setConfirmCancelId(detail.id)}
+          />
+        ) : null}
+      </Modal>
+
+      {/* Confirm-cancel modal */}
+      <Modal
+        visible={!!confirmCancelId}
+        transparent
+        animationType="fade"
+        onRequestClose={() => (!cancelling ? setConfirmCancelId(null) : null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard} testID="cancel-order-modal">
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View style={styles.warnBubble}>
+                <Feather name="alert-triangle" size={16} color={theme.colors.error} />
+              </View>
+              <Text style={styles.modalTitle}>Cancel this order?</Text>
+            </View>
+            <Text style={styles.modalBody}>
+              This cancels your order and clears it from any pending UPI payment. You can place a fresh order anytime. Admins keep a record of all orders.
+            </Text>
+            {cancelMsg ? <Text style={{ color: theme.colors.error, fontSize: 12, marginTop: 8, fontFamily: theme.font.text }}>{cancelMsg}</Text> : null}
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 16 }}>
+              <Pressable
+                testID="cancel-order-dismiss"
+                disabled={!!cancelling}
+                onPress={() => setConfirmCancelId(null)}
+                style={[styles.modalBtn, { backgroundColor: theme.colors.surfaceSecondary, flex: 1 }]}
+              >
+                <Text style={[styles.modalBtnText, { color: theme.colors.onSurface }]}>Keep order</Text>
+              </Pressable>
+              <Pressable
+                testID="cancel-order-confirm"
+                disabled={!!cancelling}
+                onPress={() => confirmCancelId && doCancel(confirmCancelId)}
+                style={[styles.modalBtn, { backgroundColor: theme.colors.error, flex: 1 }]}
+              >
+                {cancelling ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalBtnText}>Yes, cancel</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
-function OrderDetailSheet({ order, onClose }: { order: Order; onClose: () => void }) {
+function OrderDetailSheet({ order, onClose, onRequestCancel }: { order: Order; onClose: () => void; onRequestCancel: () => void }) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const hist = (order.status_history ?? []).slice().reverse();
@@ -281,6 +367,17 @@ function OrderDetailSheet({ order, onClose }: { order: Order; onClose: () => voi
             </Text>
           </View>
         ) : null}
+
+        {order.status === "pending" ? (
+          <Pressable
+            testID="detail-cancel-order"
+            onPress={() => { onClose(); setTimeout(onRequestCancel, 150); }}
+            style={styles.cancelDetailBtn}
+          >
+            <Feather name="x-circle" size={16} color={theme.colors.error} />
+            <Text style={styles.cancelDetailText}>Cancel this order</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -313,11 +410,45 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
   reviewBtn: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
-    borderWidth: 1, borderColor: theme.colors.brand,
+    borderWidth: 1, borderColor: "#9ACD32",
   },
-  reviewBtnText: { color: theme.colors.brand, fontSize: 12, fontFamily: theme.font.text },
+  reviewBtnText: { color: "#9ACD32", fontSize: 12, fontFamily: theme.font.text, fontWeight: "600" },
+  cancelBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+    borderWidth: 1, borderColor: theme.colors.error,
+  },
+  cancelBtnText: { color: theme.colors.error, fontSize: 12, fontFamily: theme.font.text, fontWeight: "600" },
+  cancelDetailBtn: {
+    flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8,
+    paddingVertical: 14, borderRadius: theme.radius.lg,
+    borderWidth: 1, borderColor: theme.colors.error,
+    backgroundColor: "rgba(208,119,103,0.05)",
+  },
+  cancelDetailText: { color: theme.colors.error, fontFamily: theme.font.text, fontSize: 14, fontWeight: "600" },
   histRow: { flexDirection: "row", gap: 10, paddingVertical: 6, alignItems: "flex-start" },
   dot: { width: 10, height: 10, borderRadius: 999, marginTop: 4 },
   histNote: { fontSize: 13, color: theme.colors.onSurface, fontFamily: theme.font.text },
   histTime: { fontSize: 11, color: theme.colors.mutedText, fontFamily: theme.font.text, marginTop: 2 },
+  modalBackdrop: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center", justifyContent: "center", padding: theme.spacing.lg,
+  },
+  modalCard: {
+    width: "100%", maxWidth: 420,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg, padding: theme.spacing.lg,
+  },
+  warnBubble: {
+    width: 32, height: 32, borderRadius: 999,
+    backgroundColor: "rgba(208,119,103,0.15)",
+    alignItems: "center", justifyContent: "center",
+  },
+  modalTitle: { fontSize: 17, color: theme.colors.onSurface, fontFamily: theme.font.display, flex: 1 },
+  modalBody: { fontSize: 13, color: theme.colors.mutedText, fontFamily: theme.font.text, marginTop: 8, lineHeight: 20 },
+  modalBtn: {
+    paddingVertical: 12, borderRadius: 999,
+    alignItems: "center", justifyContent: "center",
+  },
+  modalBtnText: { color: "#fff", fontFamily: theme.font.text, fontSize: 14 },
 });
