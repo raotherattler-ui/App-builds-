@@ -4,6 +4,7 @@ import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useState , useMemo} from "react";
+import { router } from "expo-router";
 import { useAuth } from "@/src/lib/AuthContext";
 import { useTheme, type Theme } from "@/src/theme";
 import { LeafBackground } from "@/src/components/LeafBackground";
@@ -63,7 +64,17 @@ export default function AuthScreen() {
               </>
             )}
           </Pressable>
-          <Text style={styles.tos}>By continuing you agree to our Terms & Privacy.</Text>
+          <Text style={styles.tos}>
+            By continuing you agree to our{" "}
+            <Text
+              testID="auth-privacy-link"
+              onPress={() => router.push("/privacy")}
+              style={styles.tosLink}
+            >
+              Privacy Policy
+            </Text>
+            .
+          </Text>
         </View>
       </SafeAreaView>
     </View>
@@ -93,4 +104,5 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
   },
   btnText: { color: theme.colors.onSurface, fontSize: 16, fontFamily: theme.font.text },
   tos: { color: "rgba(255,255,255,0.6)", fontSize: 12, textAlign: "center", marginTop: theme.spacing.sm, fontFamily: theme.font.text },
+  tosLink: { color: "#9ACD32", textDecorationLine: "underline" },
 });

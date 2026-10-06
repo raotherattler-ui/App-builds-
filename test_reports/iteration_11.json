@@ -1,0 +1,30 @@
+{
+  "summary": "Backend-only retest after routing fix. Updated TestPrivacyHtml in /app/backend/tests/test_avr_privacy.py to point at /api/privacy.html (public, inside /api prefix) instead of /privacy. Ran full privacy test suite + regression suite: 23/23 passed. Verified external URL https://nature-store-hub-1.preview.emergentagent.com/api/privacy.html returns 200 text/html with 'Privacy Policy', 'AVR Organics', 'Last updated', 'support@herbalbloom.app' and all 9 required sections. JSON endpoint /api/privacy still 200 with keys last_updated, contact_email, contact_whatsapp, text. All previously green endpoints still work.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_privacy.py",
+    "/app/test_reports/pytest/pytest_iteration_11.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py still exposes @app.get('/privacy') at top level — harmless internally but unreachable externally via K8s ingress. Safe to keep for internal/local dev; consider removing or documenting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_privacy.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "N/A (skipped per request)"},
+  "seed_data_creation": "None persistent. Bulk-import regression test creates and deletes p_TEST_privacy_regress within a single test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Privacy routing is fixed and verified. Submit https://nature-store-hub-1.emergent.host/api/privacy.html to Google Play Console. /api/privacy returns JSON; /api/privacy.html returns the HTML page. The internal-only /privacy route still exists as fallback for local dev.",
+  "rca_of_issue": "N/A — this iteration verified a routing fix; the previous iteration's /privacy failure root cause was that K8s ingress only forwards /api/* externally, so top-level /privacy returned the Expo app shell. Moving the HTML handler under api_router at /api/privacy.html resolves it."
+}

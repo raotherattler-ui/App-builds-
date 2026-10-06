@@ -43,6 +43,9 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "privacyPolicyUrl": "https://nature-store-hub-1.emergent.host/api/privacy.html"
     }
   }
 }

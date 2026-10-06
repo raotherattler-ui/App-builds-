@@ -1,0 +1,45 @@
+{
+  "summary": "Backend-only testing of new Privacy Policy endpoints + regression on 13 previously green endpoints. 20/23 tests PASS. /api/privacy JSON works perfectly (all required keys, ISO date 2026-10-05, correct contact email/whatsapp, all 9 sections present in text). CRITICAL ROUTING ISSUE: GET /privacy (no /api prefix) is NOT reachable from the PUBLIC URL — the Kubernetes ingress forwards only /api/* to backend; everything else is routed to the Expo frontend (port 3000). So https://nature-store-hub-1.preview.emergentagent.com/privacy returns the Expo app HTML shell (title 'avr organics', empty <div id=root>), NOT the privacy page. The backend endpoint itself works correctly at internal localhost:8001/privacy (returned proper HTML with all 9 sections, 'AVR Organics', 'Last updated: 2026-10-05', 'support@herbalbloom.app'). This means Google Play Console will NOT be able to fetch the policy via the public URL — crawlers will see 'You need to enable JavaScript to run this app.' instead. All regression endpoints green: /api/health, /api/products, /api/products/categories, /api/products/{id}, /api/admin/products/export, /api/admin/products/bulk-import (create+persist verified), /api/orders/me, /api/admin/orders/{id}/status (404 path), /api/upload (admin-gating), /api/auth/session (invalid rejected), /api/support/info, /api/admin/categories, /api/admin/admins, /api/admin/callmebot.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /privacy (top-level, NO /api prefix)",
+        "issue": "Not reachable from public URL. Kubernetes ingress routes only /api/* to the backend; /privacy is forwarded to the Expo frontend (port 3000), which returns the Expo HTML shell (<title>avr organics</title>) instead of the policy. Internal localhost:8001/privacy works fine. Google Play Console cannot use this URL — it will see the Expo JS-only shell. The main agent must either (a) register a route in the Expo app at /privacy that renders the policy as static web content, or (b) submit /api/privacy-html (move the HTML handler under /api), or (c) coordinate ingress config to expose /privacy to the backend. Reference: /app/backend/server.py:180-183.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_privacy.py",
+    "/app/test_reports/pytest/pytest_iteration_10.xml"
+  ],
+  "action_items": [
+    "FIX ROUTING for public /privacy: the current @app.get('/privacy') on the FastAPI app is unreachable from outside the cluster because the ingress rewrites only /api/*. Recommended options: (1) Expose the HTML under /api — e.g., GET /api/privacy.html returning HTMLResponse — and submit that URL to Google Play. (2) Alternatively, add an Expo static route at /app/frontend/app/privacy.tsx (public, no auth) that renders the policy for crawlers (Expo static rendering is already enabled per the index.html noscript tag). Option (1) is the fastest.",
+    "If keeping @app.get('/privacy') for local/direct use, add a comment in server.py:180 noting it is only reachable at the backend-internal port, not the public preview URL."
+  ],
+  "critical_code_review_comments": [
+    "server.py:184 — api_router = APIRouter(prefix='/api') is defined on the same line as the preceding function; cosmetic only but hurts readability (consider a blank line).",
+    "server.py:1166 — download_image() closing brace is immediately followed by '# ---------- Admin: All Orders + Status ----------' with no blank line. Harmless, but readability.",
+    "server.py:1256 — @api_router.get('/privacy') returns correct JSON. All 9 numbered sections present in _PRIVACY_POLICY_TEXT.",
+    "Startup backfill at line 1377 using an aggregation pipeline update ($set with $cond) is clever but silently warns on failure; given this ran successfully in CI/past iterations, acceptable."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_privacy.py (new)"
+  ],
+  "success_rate": {
+    "backend": "87% (20/23). The 3 failing tests are all for the same root cause: public /privacy HTML not routed to backend.",
+    "frontend": "N/A (skipped per request)"
+  },
+  "seed_data_creation": "Transient product p_TEST_privacy_regress created and deleted inside the bulk-import test. No persistent seed data left behind.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run with: EXPO_PUBLIC_BACKEND_URL=$(grep EXPO_PUBLIC_BACKEND_URL /app/frontend/.env | cut -d= -f2) python -m pytest /app/backend/tests/test_avr_privacy.py -v  — conftest.py reads EXPO_PUBLIC_BACKEND_URL from env. The /privacy routing fix is the only blocker; /api/privacy JSON is fully correct and the 9 sections match the required list.",
+  "rca_of_issue": "ROOT CAUSE — Kubernetes ingress rule only matches path prefix /api/* for upstream=backend:8001. Any other path (including /privacy, /health) is forwarded to upstream=frontend:3000 (Metro/Expo web). So @app.get('/privacy') on FastAPI is only visible when hitting the backend container directly (localhost:8001), never through the public preview URL. REPRO: curl -s https://nature-store-hub-1.preview.emergentagent.com/privacy | grep -o 'avr organics' → matches (frontend shell). curl -s http://localhost:8001/privacy | grep 'Privacy Policy' → matches (backend works). MITIGATION: Move HTML under /api (e.g., /api/privacy.html with HTMLResponse) and submit that URL to Play Store, OR add an Expo Router page at app/privacy.tsx that renders the policy statically."
+}

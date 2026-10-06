@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Request, UploadFile, File, Response, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from starlette.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -111,6 +111,77 @@ app = FastAPI()
 async def health_root():
     """Top-level health check for Kubernetes liveness/readiness probes."""
     return {"status": "ok"}
+
+
+# ---------- Public Privacy Policy (required for Play Store / App Store submission) ----------
+_PRIVACY_POLICY_LAST_UPDATED = "2026-10-05"
+_PRIVACY_POLICY_TEXT = (
+    "AVR Organics (\"the app\", \"we\", \"us\") provides a herbal products shop. "
+    "This policy explains what personal information we collect and how we use it. "
+    "By using the app you agree to this policy.\n\n"
+    "1. Information we collect\n"
+    "   • Account details: name and email from your Google Sign-In, used only to identify your account.\n"
+    "   • Order details: items ordered, delivery address, phone number — stored securely to fulfil your orders.\n"
+    "   • Device identifiers: standard crash and performance logs provided by the operating system.\n"
+    "   • Images you upload: product photos and avatars, kept on secured object storage.\n\n"
+    "2. How we use your information\n"
+    "   • To fulfil, track and update your orders.\n"
+    "   • To contact you about your orders by WhatsApp, SMS or email when necessary.\n"
+    "   • To improve the service and keep it secure.\n\n"
+    "3. Payments\n"
+    "   • Payments are completed on your UPI app or on the payment provider's secure page.\n"
+    "   • We do NOT store your UPI PIN, bank account number or card details.\n\n"
+    "4. Sharing\n"
+    "   • We do NOT sell your data.\n"
+    "   • We share only what is needed with delivery partners and payment providers so your order can be completed.\n\n"
+    "5. Data retention\n"
+    "   • Order history is retained for accounting and warranty purposes.\n"
+    "   • You can request deletion of your account and personal data at any time (see Contact below).\n\n"
+    "6. Your rights\n"
+    "   • Access your data, correct it, delete it, or restrict its use.\n"
+    "   • Withdraw consent at any time by removing the app and emailing us to delete your account.\n\n"
+    "7. Children\n"
+    "   • The app is not intended for children under 13.\n\n"
+    "8. Changes to this policy\n"
+    "   • We may update this policy as the service evolves. The \"Last updated\" date at the top reflects the latest version.\n\n"
+    "9. Contact\n"
+    "   • Email: support@herbalbloom.app\n"
+    "   • WhatsApp: +91 96773 37727\n"
+)
+
+
+def _privacy_policy_html() -> str:
+    body = _PRIVACY_POLICY_TEXT.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        "<!DOCTYPE html><html lang=\"en\"><head>"
+        "<meta charset=\"utf-8\"/>"
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>"
+        "<title>Privacy Policy — AVR Organics</title>"
+        "<style>"
+        "body{margin:0;padding:24px 20px 48px;max-width:720px;margin-left:auto;margin-right:auto;"
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
+        "color:#2B2E2A;background:#FDFBF7;line-height:1.55;}"
+        "h1{color:#5C715E;font-size:24px;margin:0 0 8px}"
+        "h2{color:#5C715E;font-size:16px;margin:28px 0 4px;letter-spacing:0.4px;text-transform:uppercase}"
+        ".meta{color:#8A8A8A;font-size:12px;margin-bottom:16px}"
+        "pre{white-space:pre-wrap;font-family:inherit;font-size:14px;margin:0}"
+        "footer{margin-top:36px;font-size:12px;color:#8A8A8A;border-top:1px solid #E6E2D7;padding-top:12px}"
+        "a{color:#5C715E}"
+        "</style></head><body>"
+        "<h1>Privacy Policy</h1>"
+        f"<div class=\"meta\">AVR Organics · Last updated: {_PRIVACY_POLICY_LAST_UPDATED}</div>"
+        f"<pre>{body}</pre>"
+        "<footer>If you have any questions about this policy, email "
+        "<a href=\"mailto:support@herbalbloom.app\">support@herbalbloom.app</a>.</footer>"
+        "</body></html>"
+    )
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_page_root():
+    """Public privacy policy page (internal only — K8s ingress routes only /api/* externally).
+    For external URLs, use /api/privacy.html instead."""
+    return HTMLResponse(_privacy_policy_html())
 api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO)
@@ -1181,6 +1252,24 @@ async def admin_toggle_stock(product_id: str, req: StockToggleRequest, authoriza
 @api_router.get("/")
 async def root():
     return {"message": "Herbal Bloom API"}
+
+
+@api_router.get("/privacy")
+async def privacy_json():
+    """Privacy policy as JSON — consumed by the in-app Privacy screen."""
+    return {
+        "last_updated": _PRIVACY_POLICY_LAST_UPDATED,
+        "contact_email": "support@herbalbloom.app",
+        "contact_whatsapp": "+91 96773 37727",
+        "text": _PRIVACY_POLICY_TEXT,
+    }
+
+
+@api_router.get("/privacy.html", response_class=HTMLResponse)
+async def privacy_page_public():
+    """Public HTML privacy policy — THIS is the URL to submit to Google Play / Apple App Store.
+    Reachable at: https://<your-host>/api/privacy.html"""
+    return HTMLResponse(_privacy_policy_html())
 
 
 @api_router.get("/health")
