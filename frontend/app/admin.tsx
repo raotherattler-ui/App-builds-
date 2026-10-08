@@ -129,6 +129,11 @@ export default function AdminScreen() {
   const [cmbMsg, setCmbMsg] = useState("");
   const [savingSupport, setSavingSupport] = useState(false);
   const [msg, setMsg] = useState("");
+  // Privacy Policy contact (independent from Customer Support)
+  const [privacyEmail, setPrivacyEmail] = useState("");
+  const [privacyWA, setPrivacyWA] = useState("");
+  const [savingPrivacy, setSavingPrivacy] = useState(false);
+  const [privacyMsg, setPrivacyMsg] = useState("");
   // Bulk Import (dev → prod sync)
   const [showImport, setShowImport] = useState(false);
   const [importJson, setImportJson] = useState("");
@@ -281,13 +286,14 @@ export default function AdminScreen() {
   };
 
   const load = useCallback(async () => {
-    const [pr, s, c, a, mi, cmb] = await Promise.all([
+    const [pr, s, c, a, mi, cmb, pc] = await Promise.all([
       api<{ products: Product[] }>("/products"),
       api<{ email: string; whatsapp: string }>("/support/info"),
       api<{ categories: string[] }>("/admin/categories", { auth: true }).catch(() => ({ categories: [] })),
       api<{ admins: AdminUser[] }>("/admin/admins", { auth: true }).catch(() => ({ admins: [] })),
       api<{ merchant_vpa: string; merchant_name: string }>("/support/info").catch(() => ({ merchant_vpa: "", merchant_name: "" })),
       api<{ phone: string; apikey: string }>("/admin/callmebot", { auth: true }).catch(() => ({ phone: "", apikey: "" })),
+      api<{ email: string; whatsapp: string }>("/admin/privacy/contact", { auth: true }).catch(() => ({ email: "", whatsapp: "" })),
     ]);
     setProducts(pr.products);
     setSupportEmail(s.email);
@@ -298,6 +304,8 @@ export default function AdminScreen() {
     setMerchantName(mi.merchant_name || "AVR Organics");
     setCmbPhone(cmb.phone || "");
     setCmbKey(cmb.apikey || "");
+    setPrivacyEmail(pc.email || "");
+    setPrivacyWA(pc.whatsapp || "");
     setLoading(false);
   }, []);
 
@@ -336,6 +344,29 @@ export default function AdminScreen() {
       setMsg(e?.message ?? "Failed to save");
     } finally {
       setSavingSupport(false);
+    }
+  };
+
+  const savePrivacy = async () => {
+    setSavingPrivacy(true);
+    setPrivacyMsg("");
+    try {
+      const r = await api<{ ok: boolean; email: string; whatsapp: string }>(
+        "/admin/privacy/contact",
+        {
+          method: "PUT",
+          auth: true,
+          body: { email: privacyEmail.trim(), whatsapp: privacyWA.trim() },
+        },
+      );
+      setPrivacyEmail(r.email || "");
+      setPrivacyWA(r.whatsapp || "");
+      setPrivacyMsg(`Saved! Privacy email: ${r.email}`);
+      setTimeout(() => setPrivacyMsg(""), 3000);
+    } catch (e: any) {
+      setPrivacyMsg(e?.message ?? "Failed to save");
+    } finally {
+      setSavingPrivacy(false);
     }
   };
 
@@ -514,7 +545,51 @@ export default function AdminScreen() {
             <Pressable testID="save-support" onPress={saveSupport} disabled={savingSupport} style={styles.cta}>
               {savingSupport ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save Support Info</Text>}
             </Pressable>
+            <Text style={[styles.hint, { marginTop: 8 }]}>
+              💡 Shown to customers on the Support screen. The Privacy Policy uses a separate contact set below.
+            </Text>
             {msg ? <Text style={[styles.msg, msg.includes("Saved") && { color: theme.colors.brand }]}>{msg}</Text> : null}
+          </View>
+
+          <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>Privacy Policy Contact</Text>
+          <View style={styles.card}>
+            <Text style={styles.label}>Privacy Email</Text>
+            <TextInput
+              testID="admin-privacy-email"
+              value={privacyEmail}
+              onChangeText={setPrivacyEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable
+              keyboardType="email-address"
+              placeholder="privacy@yourbrand.com"
+              style={styles.input}
+              placeholderTextColor={theme.colors.mutedText}
+            />
+            <Text style={styles.label}>Privacy WhatsApp / Phone</Text>
+            <TextInput
+              testID="admin-privacy-whatsapp"
+              value={privacyWA}
+              onChangeText={setPrivacyWA}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable
+              keyboardType="phone-pad"
+              placeholder="+919876543210"
+              style={styles.input}
+              placeholderTextColor={theme.colors.mutedText}
+            />
+            <Pressable testID="save-privacy" onPress={savePrivacy} disabled={savingPrivacy} style={styles.cta}>
+              {savingPrivacy ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save Privacy Contact</Text>}
+            </Pressable>
+            <Text style={[styles.hint, { marginTop: 8 }]}>
+              🔒 Appears only in the public Privacy Policy (Play Store / App Store URL). Leave empty to reuse the Customer Support contact above.
+            </Text>
+            {privacyMsg ? (
+              <Text style={[styles.msg, privacyMsg.includes("Saved") && { color: theme.colors.brand }]}>
+                {privacyMsg}
+              </Text>
+            ) : null}
           </View>
 
           <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>Payment (UPI)</Text>

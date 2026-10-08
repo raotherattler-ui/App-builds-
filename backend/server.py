@@ -114,45 +114,49 @@ async def health_root():
 
 
 # ---------- Public Privacy Policy (required for Play Store / App Store submission) ----------
-_PRIVACY_POLICY_LAST_UPDATED = "2026-10-05"
-_PRIVACY_POLICY_TEXT = (
-    "AVR Organics (\"the app\", \"we\", \"us\") provides a herbal products shop. "
-    "This policy explains what personal information we collect and how we use it. "
-    "By using the app you agree to this policy.\n\n"
-    "1. Information we collect\n"
-    "   • Account details: name and email from your Google Sign-In, used only to identify your account.\n"
-    "   • Order details: items ordered, delivery address, phone number — stored securely to fulfil your orders.\n"
-    "   • Device identifiers: standard crash and performance logs provided by the operating system.\n"
-    "   • Images you upload: product photos and avatars, kept on secured object storage.\n\n"
-    "2. How we use your information\n"
-    "   • To fulfil, track and update your orders.\n"
-    "   • To contact you about your orders by WhatsApp, SMS or email when necessary.\n"
-    "   • To improve the service and keep it secure.\n\n"
-    "3. Payments\n"
-    "   • Payments are completed on your UPI app or on the payment provider's secure page.\n"
-    "   • We do NOT store your UPI PIN, bank account number or card details.\n\n"
-    "4. Sharing\n"
-    "   • We do NOT sell your data.\n"
-    "   • We share only what is needed with delivery partners and payment providers so your order can be completed.\n\n"
-    "5. Data retention\n"
-    "   • Order history is retained for accounting and warranty purposes.\n"
-    "   • You can delete your account and personal data at any time from the app (Profile → Delete my account). Past orders will be kept but your name, email, phone and address will be anonymised.\n\n"
-    "6. Your rights\n"
-    "   • Access your data, correct it, delete it, or restrict its use.\n"
-    "   • You may delete your account directly from the app (Profile → Delete my account) or by emailing us.\n"
-    "   • Withdraw consent at any time by removing the app and emailing us to delete your account.\n\n"
-    "7. Children\n"
-    "   • The app is not intended for children under 13.\n\n"
-    "8. Changes to this policy\n"
-    "   • We may update this policy as the service evolves. The \"Last updated\" date at the top reflects the latest version.\n\n"
-    "9. Contact\n"
-    "   • Email: support@herbalbloom.app\n"
-    "   • WhatsApp: +91 96773 37727\n"
-)
+_PRIVACY_POLICY_LAST_UPDATED = "2026-10-06"
 
 
-def _privacy_policy_html() -> str:
-    body = _PRIVACY_POLICY_TEXT.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def _privacy_policy_text(email: str, whatsapp: str) -> str:
+    """Builds the policy with the admin-managed contact info injected at the end."""
+    return (
+        "AVR Organics (\"the app\", \"we\", \"us\") provides a herbal products shop. "
+        "This policy explains what personal information we collect and how we use it. "
+        "By using the app you agree to this policy.\n\n"
+        "1. Information we collect\n"
+        "   • Account details: name and email from your Google Sign-In, used only to identify your account.\n"
+        "   • Order details: items ordered, delivery address, phone number — stored securely to fulfil your orders.\n"
+        "   • Device identifiers: standard crash and performance logs provided by the operating system.\n"
+        "   • Images you upload: product photos and avatars, kept on secured object storage.\n\n"
+        "2. How we use your information\n"
+        "   • To fulfil, track and update your orders.\n"
+        "   • To contact you about your orders by WhatsApp, SMS or email when necessary.\n"
+        "   • To improve the service and keep it secure.\n\n"
+        "3. Payments\n"
+        "   • Payments are completed on your UPI app or on the payment provider's secure page.\n"
+        "   • We do NOT store your UPI PIN, bank account number or card details.\n\n"
+        "4. Sharing\n"
+        "   • We do NOT sell your data.\n"
+        "   • We share only what is needed with delivery partners and payment providers so your order can be completed.\n\n"
+        "5. Data retention\n"
+        "   • Order history is retained for accounting and warranty purposes.\n"
+        "   • You can delete your account and personal data at any time from the app (Profile → Delete my account). Past orders will be kept but your name, email, phone and address will be anonymised.\n\n"
+        "6. Your rights\n"
+        "   • Access your data, correct it, delete it, or restrict its use.\n"
+        "   • You may delete your account directly from the app (Profile → Delete my account) or by emailing us.\n"
+        "   • Withdraw consent at any time by removing the app and emailing us to delete your account.\n\n"
+        "7. Children\n"
+        "   • The app is not intended for children under 13.\n\n"
+        "8. Changes to this policy\n"
+        "   • We may update this policy as the service evolves. The \"Last updated\" date at the top reflects the latest version.\n\n"
+        "9. Contact\n"
+        f"   • Email: {email}\n"
+        f"   • WhatsApp: {whatsapp}\n"
+    )
+
+
+def _privacy_policy_html(email: str, whatsapp: str) -> str:
+    body = _privacy_policy_text(email, whatsapp).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return (
         "<!DOCTYPE html><html lang=\"en\"><head>"
         "<meta charset=\"utf-8\"/>"
@@ -172,8 +176,7 @@ def _privacy_policy_html() -> str:
         "<h1>Privacy Policy</h1>"
         f"<div class=\"meta\">AVR Organics · Last updated: {_PRIVACY_POLICY_LAST_UPDATED}</div>"
         f"<pre>{body}</pre>"
-        "<footer>If you have any questions about this policy, email "
-        "<a href=\"mailto:support@herbalbloom.app\">support@herbalbloom.app</a>.</footer>"
+        f"<footer>If you have any questions, email <a href=\"mailto:{email}\">{email}</a>.</footer>"
         "</body></html>"
     )
 
@@ -182,7 +185,8 @@ def _privacy_policy_html() -> str:
 async def privacy_page_root():
     """Public privacy policy page (internal only — K8s ingress routes only /api/* externally).
     For external URLs, use /api/privacy.html instead."""
-    return HTMLResponse(_privacy_policy_html())
+    s = await get_privacy_contact_settings()
+    return HTMLResponse(_privacy_policy_html(s["email"], s["whatsapp"]))
 api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO)
@@ -803,6 +807,20 @@ async def get_support_settings() -> dict:
     return {"email": DEFAULT_SUPPORT_EMAIL, "whatsapp": DEFAULT_SUPPORT_WHATSAPP}
 
 
+async def get_privacy_contact_settings() -> dict:
+    """Dedicated contact (email + whatsapp) for the Privacy Policy document.
+    If the admin has not explicitly set one, we gracefully fall back to the
+    Customer Support contact so the policy is never blank."""
+    s = await db.settings.find_one({"key": "privacy_contact"}, {"_id": 0})
+    if s and (s.get("email") or s.get("whatsapp")):
+        fallback = await get_support_settings()
+        return {
+            "email": (s.get("email") or fallback["email"]).strip(),
+            "whatsapp": (s.get("whatsapp") or fallback["whatsapp"]).strip(),
+        }
+    return await get_support_settings()
+
+
 async def get_merchant_settings() -> dict:
     s = await db.settings.find_one({"key": "merchant"}, {"_id": 0})
     return {
@@ -856,6 +874,11 @@ class SupportUpdateRequest(BaseModel):
     whatsapp: str
 
 
+class PrivacyContactUpdateRequest(BaseModel):
+    email: str
+    whatsapp: str
+
+
 class MerchantUpdateRequest(BaseModel):
     vpa: str
     name: str
@@ -882,6 +905,25 @@ async def admin_update_support(req: SupportUpdateRequest, authorization: Optiona
         upsert=True,
     )
     return {"ok": True}
+
+
+@api_router.get("/admin/privacy/contact")
+async def admin_get_privacy_contact(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    return await get_privacy_contact_settings()
+
+
+@api_router.put("/admin/privacy/contact")
+async def admin_update_privacy_contact(
+    req: PrivacyContactUpdateRequest, authorization: Optional[str] = Header(None)
+):
+    await require_admin(authorization)
+    await db.settings.update_one(
+        {"key": "privacy_contact"},
+        {"$set": {"key": "privacy_contact", "email": req.email.strip(), "whatsapp": req.whatsapp.strip()}},
+        upsert=True,
+    )
+    return {"ok": True, **(await get_privacy_contact_settings())}
 
 
 @api_router.put("/admin/merchant")
@@ -1347,11 +1389,12 @@ async def root():
 @api_router.get("/privacy")
 async def privacy_json():
     """Privacy policy as JSON — consumed by the in-app Privacy screen."""
+    s = await get_privacy_contact_settings()
     return {
         "last_updated": _PRIVACY_POLICY_LAST_UPDATED,
-        "contact_email": "support@herbalbloom.app",
-        "contact_whatsapp": "+91 96773 37727",
-        "text": _PRIVACY_POLICY_TEXT,
+        "contact_email": s["email"],
+        "contact_whatsapp": s["whatsapp"],
+        "text": _privacy_policy_text(s["email"], s["whatsapp"]),
     }
 
 
@@ -1406,7 +1449,8 @@ async def admin_set_pricelist_images(req: PriceListImagesRequest, authorization:
 async def privacy_page_public():
     """Public HTML privacy policy — THIS is the URL to submit to Google Play / Apple App Store.
     Reachable at: https://<your-host>/api/privacy.html"""
-    return HTMLResponse(_privacy_policy_html())
+    s = await get_privacy_contact_settings()
+    return HTMLResponse(_privacy_policy_html(s["email"], s["whatsapp"]))
 
 
 @api_router.get("/health")

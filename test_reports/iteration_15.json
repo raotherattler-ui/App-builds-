@@ -1,0 +1,37 @@
+{
+  "summary": "Backend-only tests for the NEW dedicated Privacy Policy contact feature (settings.key='privacy_contact' + admin endpoints GET/PUT /api/admin/privacy/contact). Created /app/backend/tests/test_avr_privacy_contact.py with 12 focused tests covering every case from the request: (A) Fallback when privacy_contact unset — /api/privacy and /api/privacy.html both return the live /api/support/info values. (B) Auth gating — GET and PUT /api/admin/privacy/contact return 401/403 without a token, 403 for non-admin users, 401/403 for bogus bearer tokens. (C) PUT→GET round-trip — PUT returns {ok, email, whatsapp}; subsequent GET /api/admin/privacy/contact returns same; /api/privacy JSON shows privacy@avr.test (not the support email); /api/privacy.html contains the new email + whatsapp AND the mailto: anchor is rebuilt with it; /api/support/info is proven UNCHANGED. (D) Updating /api/admin/support with a brand new email does NOT touch privacy — /api/privacy and /api/privacy.html still show the dedicated privacy contact, and the new support email is confirmed absent from the privacy HTML. (E) Partial clear with {email:'', whatsapp:''} causes the helper to fall back to the current Customer Support contact for /api/privacy, /api/privacy.html, AND the PUT response itself. Also quick sanity: /api/support/info shape and /api/privacy.html 200 + text/html + 'Privacy Policy' heading. RESULT: 12/12 passed in 1.40s on first run. settings_snapshot fixture captures/restores BOTH settings docs (support + privacy_contact) per test so no cross-test pollution and seed data is clean after the suite. No MOCKS. No code changes to production — tests only.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_privacy_contact.py",
+    "/app/test_reports/pytest/pytest_iteration_15_privacy_contact.xml"
+  ],
+  "action_items": [
+    "None required for this feature — backend implementation is correct and fully covered by the new test file.",
+    "Nit (optional, non-blocking): get_privacy_contact_settings() in server.py:810 treats a privacy_contact doc with both fields empty-string as 'unset' and falls back to support — this is the intended behavior per case (E) and works. If the admin ever wants to set ONLY a privacy email and inherit the whatsapp from support, that is already supported via the per-field fallback on lines 817-819. No change needed."
+  ],
+  "critical_code_review_comments": [
+    "get_privacy_contact_settings() (server.py:810-821) correctly: (1) returns support fallback when the doc is missing, (2) returns support fallback when both fields are empty, (3) does per-field fallback when one is empty, (4) strips whitespace. Clean and testable.",
+    "admin_update_privacy_contact() (server.py:916-926) uses upsert=True on settings.key='privacy_contact' — idempotent. Returns {ok, email, whatsapp} spreading the resolved contact so the UI immediately sees the effective (possibly fallback) values after a clear. Good UX.",
+    "All three privacy handlers (/privacy at line 184, /api/privacy at line 1389, /api/privacy.html at line 1448) now call get_privacy_contact_settings() instead of get_support_settings(), so admin edits to settings.key='support' no longer leak into privacy once privacy_contact is set. Verified end-to-end in TestSupportUpdateDoesNotAffectPrivacy.",
+    "Admin gating via require_admin on both admin_get_privacy_contact and admin_update_privacy_contact is correct — verified 401 unauth / 403 non-admin / 403 bogus-bearer.",
+    "server.py is now 1623 lines (up from 1585 last iter) — still functional but trending toward the 'split into routers' recommendation from iter 14. Non-blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_privacy_contact.py (new file — 12 tests, all pass)"
+  ],
+  "success_rate": {"backend": "100% (12/12 for privacy_contact feature)", "frontend": "not tested (per request — backend only)"},
+  "seed_data_creation": "Uses existing session-scoped seeded_admin (TEST_admin@example.com, is_admin=true) and seeded_user (TEST_user@example.com) fixtures from conftest.py. A per-test settings_snapshot fixture snapshots and restores BOTH settings docs (settings.key='support' and settings.key='privacy_contact') so Mongo state is clean after the suite — no leaked privacy@avr.test or TEST_support_* values.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Privacy Policy contact is now a dedicated admin-managed field at settings.key='privacy_contact' (fields: email, whatsapp), separate from Customer Support (settings.key='support'). Admin endpoints: GET/PUT /api/admin/privacy/contact. The three privacy render routes (@app.get('/privacy'), @api_router.get('/privacy'), @api_router.get('/privacy.html')) all read via get_privacy_contact_settings() which falls back to get_support_settings() when the privacy_contact doc is missing OR both fields are empty strings. Full regression file remains /app/backend/tests/test_avr_privacy.py (31 tests, still green per iter 14) — this iteration added test_avr_privacy_contact.py (12 tests) specifically for the separation feature. Pre-existing unrelated failure in test_avr_backend.py::TestCart::test_cart_flow (hardcoded expected subtotal) persists from iter 12.",
+  "rca_of_issue": "No bug this iteration — feature works as designed. Verified: separation (support edits don't leak into privacy), auth gating (401/403), round-trip persistence, per-field + full fallback, and that PUT with empty strings returns the resolved fallback values so the admin UI reflects reality."
+}

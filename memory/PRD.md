@@ -31,3 +31,14 @@ Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in `/app/backend/.env` to switch
 ## Support Defaults
 - Email: support@herbalbloom.app (editable via admin panel)
 - WhatsApp: +91 9677337727 (editable via admin panel)
+
+## Privacy Policy Contact
+Separate from Customer Support. Admin can set a dedicated privacy email + WhatsApp under
+"Privacy Policy Contact" in the Admin panel. These values appear only in the public
+Privacy Policy (`/api/privacy.html`, `/api/privacy`). If left blank, the policy
+gracefully falls back to the Customer Support contact.
+
+## User Capacity
+No hard cap on sign-ups. Emergent-managed Google Sign-In accepts any valid Google
+account; MongoDB scales into millions of users. Only the admin role is restricted
+(whitelisted emails in `ADMIN_EMAILS`).

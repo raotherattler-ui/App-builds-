@@ -1,0 +1,38 @@
+{
+  "summary": "Backend regression + feature tests for DYNAMIC Privacy Policy contact fields (contact_email + contact_whatsapp sourced from settings.key='support'). Rewrote /app/backend/tests/test_avr_privacy.py: dropped hardcoded 'support@herbalbloom.app' assertions and replaced with mongo-driven assertions that compare privacy endpoint output against the live support settings doc. Added 3 new classes: (1) TestPrivacyRoot — verifies the internal /privacy route reflects admin values (hit via http://localhost:8001/privacy because K8s ingress only maps /api/* externally); (2) TestDynamicContactFlow — PUT /api/admin/support with new {email, whatsapp} is immediately reflected on next GET of /api/privacy, /api/privacy.html, /privacy and /api/support/info (including whatsapp_link rebuild); auth/role gating also verified; (3) TestFallbackToEnvDefaults — deletes settings.key='support' from Mongo and asserts privacy endpoints fall back to DEFAULT_SUPPORT_EMAIL/WHATSAPP from backend/.env without crashing. All 31 tests in test_avr_privacy.py PASS. Full suite: 166/167 PASS. The lone failure (test_avr_backend.py::TestCart::test_cart_flow — assert 680.0 == 1247.0) is a pre-existing unrelated issue carried over from iteration 12/13 (hardcoded expected subtotal has drifted from seeded product prices). Mocked APIs: NONE.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_privacy.py",
+    "/app/test_reports/pytest/pytest_iteration_14_privacy.xml",
+    "/app/test_reports/pytest/pytest_iteration_14_full.xml"
+  ],
+  "action_items": [
+    "No action required for the Privacy Policy dynamic-contact feature — backend is correct and fully covered end-to-end.",
+    "Pre-existing (carried over since iteration 12): backend/tests/test_avr_backend.py::TestCart::test_cart_flow has a hardcoded expected subtotal of 1247.0 that no longer matches current seeded product prices (actual 680.0). Line 102. Unrelated to this iteration; update when convenient.",
+    "server.py is now 1585 lines — approaching maintainability threshold. Non-blocking but consider splitting into routers (auth, products, orders, admin, privacy, pricelist)."
+  ],
+  "critical_code_review_comments": [
+    "_privacy_policy_text(email, whatsapp) and _privacy_policy_html(email, whatsapp) are pure factories — correct refactor. No module-level mutable state (good for concurrency).",
+    "All 3 handlers (/privacy, /api/privacy, /api/privacy.html) correctly await get_support_settings() and inject both the email and whatsapp into the body AND the mailto: anchor. HTML escaping is done BEFORE substitution via replace(&/</>) on the full policy text — safe because current support emails don't contain those chars, but if an admin ever enters an email like 'a&b@x.com' or '<x>@y.com' it could be mangled or produce malformed HTML. Low-priority edge case worth tightening in a future pass.",
+    "get_support_settings() correctly falls back to DEFAULT_SUPPORT_EMAIL / DEFAULT_SUPPORT_WHATSAPP from env when the Mongo doc is absent — verified by TestFallbackToEnvDefaults.",
+    "PUT /api/admin/support uses upsert=True on settings.key='support' — idempotent; good. Admin gating via require_admin is enforced (401 unauth, 403 non-admin verified)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_privacy.py (full rewrite — switched from hardcoded to dynamic settings-driven assertions; added TestPrivacyRoot, TestDynamicContactFlow, TestFallbackToEnvDefaults; snapshot/restore of settings.key='support' via `support_snapshot` fixture prevents cross-test pollution)"
+  ],
+  "success_rate": {"backend": "100% on privacy feature (31/31); 166/167 full suite — 1 unrelated pre-existing failure", "frontend": "not tested (per request)"},
+  "seed_data_creation": "Tests use existing seeded_admin / seeded_user fixtures (TEST_-prefixed emails). A per-test `support_snapshot` fixture captures the current settings.key='support' Mongo doc and restores it in teardown (or deletes it if it didn't exist pre-test) so mutations never leak between tests or outlive the suite.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Privacy policy contact fields are DYNAMIC — sourced from Mongo settings.key='support' with env-var fallback (DEFAULT_SUPPORT_EMAIL / DEFAULT_SUPPORT_WHATSAPP in /app/backend/.env). Three handlers inject them: @app.get('/privacy') (internal only — not reachable through public ingress; tests hit http://localhost:8001/privacy directly), @api_router.get('/privacy') (JSON — returns contact_email, contact_whatsapp, text), @api_router.get('/privacy.html') (public HTML — Play Store URL). Admin edits via PUT /api/admin/support {email, whatsapp} must flow through to the next GET of ALL three endpoints — covered by TestDynamicContactFlow. Pre-existing unrelated failure in test_avr_backend.py::test_cart_flow has carried over since iteration 12 — not a regression from this iteration.",
+  "rca_of_issue": "No new bug this iteration. The dynamic contact-injection feature works correctly: admin PUT → next privacy GET returns the new values across all 3 handlers; fallback to env defaults works when the settings doc is absent; auth/role gating on /api/admin/support is correct."
+}
