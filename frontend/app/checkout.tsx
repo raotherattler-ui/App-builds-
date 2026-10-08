@@ -25,13 +25,72 @@ export default function Checkout() {
   const [err, setErr] = useState("");
   const [method, setMethod] = useState<Method>("upi");
   const [merchantVpa, setMerchantVpa] = useState<string>("");
+  // Promo coupon
+  const [couponInput, setCouponInput] = useState("");
+  const [applied, setApplied] = useState<{ code: string; discount: number } | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+  const [couponMsg, setCouponMsg] = useState("");
 
   useEffect(() => {
     api<{ subtotal: number }>("/cart", { auth: true }).then((r) => setSubtotal(r.subtotal)).catch(() => {});
     api<{ merchant_vpa: string }>("/support/info").then((r) => setMerchantVpa(r.merchant_vpa || "")).catch(() => {});
   }, []);
 
-  const total = subtotal + (subtotal > 999 || subtotal === 0 ? 0 : 49);
+  // Re-validate the applied coupon whenever the subtotal changes (e.g. cart edits)
+  useEffect(() => {
+    if (!applied || subtotal <= 0) return;
+    api<{ valid: boolean; discount?: number; error?: string }>("/coupons/validate", {
+      method: "POST",
+      body: { code: applied.code, subtotal },
+    })
+      .then((r) => {
+        if (r.valid && typeof r.discount === "number") setApplied({ code: applied.code, discount: r.discount });
+        else {
+          setApplied(null);
+          setCouponMsg(r.error ?? "Coupon no longer applicable");
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotal]);
+
+  const discount = applied?.discount ?? 0;
+  const discountedSubtotal = Math.max(0, subtotal - discount);
+  const shipping = discountedSubtotal > 999 || discountedSubtotal === 0 ? 0 : 49;
+  const total = discountedSubtotal + shipping;
+
+  const applyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) {
+      setCouponMsg("Enter a coupon code");
+      return;
+    }
+    setCouponBusy(true);
+    setCouponMsg("");
+    try {
+      const r = await api<{ valid: boolean; code?: string; discount?: number; error?: string }>(
+        "/coupons/validate",
+        { method: "POST", body: { code, subtotal } },
+      );
+      if (r.valid && r.code && typeof r.discount === "number") {
+        setApplied({ code: r.code, discount: r.discount });
+        setCouponInput("");
+        setCouponMsg(`Applied ${r.code} · −₹${r.discount.toFixed(2)}`);
+      } else {
+        setApplied(null);
+        setCouponMsg(r.error ?? "Invalid coupon");
+      }
+    } catch (e: any) {
+      setCouponMsg(e?.message ?? "Could not validate coupon");
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setApplied(null);
+    setCouponMsg("");
+  };
 
   const placeOrder = async () => {
     setErr("");
@@ -46,7 +105,11 @@ export default function Checkout() {
         merchant_name: string; payment_method: string;
       }>("/orders/create", {
         method: "POST", auth: true,
-        body: { address: { full_name, phone, line1, city, state, pincode }, payment_method: method },
+        body: {
+          address: { full_name, phone, line1, city, state, pincode },
+          payment_method: method,
+          coupon_code: applied?.code ?? null,
+        },
       });
 
       if (method === "cod") {
@@ -149,11 +212,59 @@ export default function Checkout() {
 
           <View style={styles.sumCard}>
             <View style={styles.sumRow}><Text style={styles.sumK}>Subtotal</Text><Text style={styles.sumV}>₹{subtotal.toFixed(2)}</Text></View>
-            <View style={styles.sumRow}><Text style={styles.sumK}>Shipping</Text><Text style={styles.sumV}>{subtotal > 999 || subtotal === 0 ? "Free" : "₹49.00"}</Text></View>
+            {applied ? (
+              <View style={styles.sumRow}>
+                <Text style={[styles.sumK, { color: theme.colors.brand }]}>Coupon {applied.code}</Text>
+                <Text style={[styles.sumV, { color: theme.colors.brand }]}>−₹{discount.toFixed(2)}</Text>
+              </View>
+            ) : null}
+            <View style={styles.sumRow}><Text style={styles.sumK}>Shipping</Text><Text style={styles.sumV}>{discountedSubtotal > 999 || discountedSubtotal === 0 ? "Free" : "₹49.00"}</Text></View>
             <View style={[styles.sumRow, { borderTopWidth: 1, borderTopColor: theme.colors.divider, paddingTop: 8, marginTop: 4 }]}>
               <Text style={styles.totalK}>Total</Text><Text style={styles.totalV}>₹{total.toFixed(2)}</Text>
             </View>
           </View>
+
+          <Text style={[styles.section, { marginTop: theme.spacing.md }]}>Promo Code</Text>
+          {applied ? (
+            <View style={styles.couponChip} testID="coupon-applied">
+              <Feather name="tag" size={16} color={theme.colors.brand} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.couponChipTitle}>{applied.code} applied</Text>
+                <Text style={styles.couponChipSub}>You saved ₹{discount.toFixed(2)}</Text>
+              </View>
+              <Pressable testID="coupon-remove" onPress={removeCoupon} hitSlop={8}>
+                <Feather name="x" size={18} color={theme.colors.mutedText} />
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.couponRow}>
+              <TextInput
+                testID="coupon-input"
+                value={couponInput}
+                onChangeText={(t) => setCouponInput(t.toUpperCase())}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                placeholder="Enter promo code"
+                placeholderTextColor={theme.colors.mutedText}
+                style={[styles.input, { flex: 1 }]}
+              />
+              <Pressable
+                testID="coupon-apply"
+                onPress={applyCoupon}
+                disabled={couponBusy || !couponInput.trim()}
+                style={[styles.couponApplyBtn, (couponBusy || !couponInput.trim()) && { opacity: 0.6 }]}
+              >
+                {couponBusy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.couponApplyText}>Apply</Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+          {couponMsg ? (
+            <Text style={[styles.couponMsg, applied && { color: theme.colors.brand }]}>{couponMsg}</Text>
+          ) : null}
 
           {err ? <Text style={styles.err}>{err}</Text> : null}
         </ScrollView>
@@ -214,6 +325,20 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
   sumV: { color: theme.colors.onSurface, fontFamily: theme.font.text },
   totalK: { color: theme.colors.onSurface, fontSize: 16, fontFamily: theme.font.display },
   totalV: { color: theme.colors.brand, fontSize: 18, fontFamily: theme.font.display },
+  couponRow: { flexDirection: "row", gap: theme.spacing.sm, alignItems: "center" },
+  couponApplyBtn: {
+    backgroundColor: theme.colors.brand, paddingVertical: 14, paddingHorizontal: 20,
+    borderRadius: theme.radius.md, alignItems: "center", justifyContent: "center", minWidth: 80,
+  },
+  couponApplyText: { color: "#fff", fontSize: 14, fontFamily: theme.font.text },
+  couponChip: {
+    flexDirection: "row", alignItems: "center", gap: theme.spacing.sm,
+    backgroundColor: theme.colors.brandTertiary, paddingVertical: 12, paddingHorizontal: 14,
+    borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.brand,
+  },
+  couponChipTitle: { color: theme.colors.brand, fontFamily: theme.font.display, fontSize: 14 },
+  couponChipSub: { color: theme.colors.onSurface, fontFamily: theme.font.text, fontSize: 12 },
+  couponMsg: { fontSize: 12, color: theme.colors.mutedText, fontFamily: theme.font.text, marginTop: 4 },
   err: { color: theme.colors.error, fontFamily: theme.font.text },
   stickyBar: {
     position: "absolute", left: 0, right: 0, bottom: 0,

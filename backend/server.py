@@ -235,6 +235,29 @@ class CheckoutAddress(BaseModel):
 class OrderCreateRequest(BaseModel):
     address: CheckoutAddress
     payment_method: str = "upi"  # "upi", "cod", "razorpay"
+    coupon_code: Optional[str] = None
+
+
+class CouponValidateRequest(BaseModel):
+    code: str
+    subtotal: float
+
+
+class CouponCreateRequest(BaseModel):
+    code: str
+    discount_type: str = "percent"  # "percent" | "flat"
+    discount_value: float
+    min_order_value: float = 0.0
+    expires_at: Optional[str] = None  # ISO 8601 date / datetime, nullable
+    active: bool = True
+
+
+class CouponUpdateRequest(BaseModel):
+    discount_type: Optional[str] = None
+    discount_value: Optional[float] = None
+    min_order_value: Optional[float] = None
+    expires_at: Optional[str] = None  # pass "" or null to clear
+    active: Optional[bool] = None
 
 
 class PaymentVerifyRequest(BaseModel):
@@ -515,6 +538,182 @@ async def cart_clear(authorization: Optional[str] = Header(None)):
     return {"ok": True}
 
 
+# ---------- Promo Coupons ----------
+def _normalize_coupon_code(code: str) -> str:
+    return (code or "").strip().upper()
+
+
+def _parse_coupon_expiry(value: Optional[str]) -> Optional[datetime]:
+    """Accepts an ISO date (YYYY-MM-DD) or datetime string; empty / None means no expiry."""
+    if not value:
+        return None
+    v = value.strip()
+    if not v:
+        return None
+    try:
+        # Normalise trailing Z and date-only forms
+        if v.endswith("Z"):
+            v = v[:-1] + "+00:00"
+        if len(v) == 10:  # YYYY-MM-DD → end of day UTC
+            dt = datetime.fromisoformat(v).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        else:
+            dt = datetime.fromisoformat(v)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        raise HTTPException(400, f"Invalid expires_at value: {value}")
+
+
+def _coupon_public(c: dict) -> dict:
+    return {
+        "id": c["id"],
+        "code": c["code"],
+        "discount_type": c["discount_type"],
+        "discount_value": c["discount_value"],
+        "min_order_value": c.get("min_order_value", 0.0),
+        "expires_at": c["expires_at"].isoformat() if isinstance(c.get("expires_at"), datetime) else c.get("expires_at"),
+        "active": bool(c.get("active", True)),
+        "used_count": int(c.get("used_count", 0)),
+        "created_at": c["created_at"].isoformat() if isinstance(c.get("created_at"), datetime) else c.get("created_at"),
+    }
+
+
+def _compute_coupon_discount(coupon: dict, subtotal: float) -> float:
+    """Pure helper — returns the discount amount (never greater than subtotal)."""
+    if coupon["discount_type"] == "percent":
+        d = subtotal * (float(coupon["discount_value"]) / 100.0)
+    else:  # flat
+        d = float(coupon["discount_value"])
+    d = max(0.0, min(d, subtotal))
+    return round(d, 2)
+
+
+async def _resolve_coupon(code: str, subtotal: float) -> tuple[Optional[dict], Optional[str], float]:
+    """Returns (coupon_doc_or_None, error_or_None, discount_amount).
+    Case-insensitive; all server-side validation happens here."""
+    norm = _normalize_coupon_code(code)
+    if not norm:
+        return None, "Enter a coupon code", 0.0
+    c = await db.coupons.find_one({"code": norm}, {"_id": 0})
+    if not c:
+        return None, "Invalid coupon code", 0.0
+    if not c.get("active", True):
+        return None, "This coupon is inactive", 0.0
+    exp = c.get("expires_at")
+    if isinstance(exp, datetime):
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < datetime.now(timezone.utc):
+            return None, "This coupon has expired", 0.0
+    min_ov = float(c.get("min_order_value") or 0)
+    if min_ov > 0 and subtotal < min_ov:
+        return None, f"Minimum order ₹{min_ov:.0f} required for this coupon", 0.0
+    disc = _compute_coupon_discount(c, subtotal)
+    if disc <= 0:
+        return None, "Coupon not applicable", 0.0
+    return c, None, disc
+
+
+@api_router.post("/coupons/validate")
+async def validate_coupon(req: CouponValidateRequest):
+    """Public — any customer can check a coupon from the checkout screen."""
+    subtotal = max(0.0, float(req.subtotal or 0))
+    coupon, err, discount = await _resolve_coupon(req.code, subtotal)
+    if err or not coupon:
+        return {"valid": False, "error": err or "Invalid coupon", "discount": 0.0, "final": round(subtotal, 2)}
+    final = round(max(0.0, subtotal - discount), 2)
+    return {
+        "valid": True,
+        "code": coupon["code"],
+        "discount_type": coupon["discount_type"],
+        "discount_value": coupon["discount_value"],
+        "discount": discount,
+        "final": final,
+    }
+
+
+@api_router.get("/admin/coupons")
+async def admin_list_coupons(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    cursor = db.coupons.find({}, {"_id": 0}).sort("created_at", -1)
+    return {"coupons": [_coupon_public(c) async for c in cursor]}
+
+
+@api_router.post("/admin/coupons")
+async def admin_create_coupon(req: CouponCreateRequest, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    code = _normalize_coupon_code(req.code)
+    if not code:
+        raise HTTPException(400, "Code is required")
+    if req.discount_type not in ("percent", "flat"):
+        raise HTTPException(400, "discount_type must be 'percent' or 'flat'")
+    if req.discount_value is None or req.discount_value <= 0:
+        raise HTTPException(400, "discount_value must be > 0")
+    if req.discount_type == "percent" and req.discount_value > 100:
+        raise HTTPException(400, "percent discount cannot exceed 100")
+    if await db.coupons.find_one({"code": code}, {"_id": 1}):
+        raise HTTPException(409, f"Coupon {code} already exists")
+    exp = _parse_coupon_expiry(req.expires_at)
+    now = datetime.now(timezone.utc)
+    doc = {
+        "id": f"cp_{uuid.uuid4().hex[:12]}",
+        "code": code,
+        "discount_type": req.discount_type,
+        "discount_value": float(req.discount_value),
+        "min_order_value": float(max(0.0, req.min_order_value or 0.0)),
+        "expires_at": exp,
+        "active": bool(req.active),
+        "used_count": 0,
+        "created_at": now,
+    }
+    await db.coupons.insert_one(doc)
+    return {"ok": True, "coupon": _coupon_public(doc)}
+
+
+@api_router.patch("/admin/coupons/{coupon_id}")
+async def admin_update_coupon(
+    coupon_id: str, req: CouponUpdateRequest, authorization: Optional[str] = Header(None)
+):
+    await require_admin(authorization)
+    existing = await db.coupons.find_one({"id": coupon_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Coupon not found")
+    updates: dict = {}
+    if req.discount_type is not None:
+        if req.discount_type not in ("percent", "flat"):
+            raise HTTPException(400, "discount_type must be 'percent' or 'flat'")
+        updates["discount_type"] = req.discount_type
+    if req.discount_value is not None:
+        if req.discount_value <= 0:
+            raise HTTPException(400, "discount_value must be > 0")
+        dtype = updates.get("discount_type", existing["discount_type"])
+        if dtype == "percent" and req.discount_value > 100:
+            raise HTTPException(400, "percent discount cannot exceed 100")
+        updates["discount_value"] = float(req.discount_value)
+    if req.min_order_value is not None:
+        updates["min_order_value"] = float(max(0.0, req.min_order_value))
+    if req.expires_at is not None:
+        # Empty string explicitly clears the expiry
+        updates["expires_at"] = _parse_coupon_expiry(req.expires_at) if req.expires_at else None
+    if req.active is not None:
+        updates["active"] = bool(req.active)
+    if not updates:
+        return {"ok": True, "coupon": _coupon_public(existing)}
+    await db.coupons.update_one({"id": coupon_id}, {"$set": updates})
+    fresh = await db.coupons.find_one({"id": coupon_id}, {"_id": 0})
+    return {"ok": True, "coupon": _coupon_public(fresh)}
+
+
+@api_router.delete("/admin/coupons/{coupon_id}")
+async def admin_delete_coupon(coupon_id: str, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    r = await db.coupons.delete_one({"id": coupon_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Coupon not found")
+    return {"ok": True}
+
+
 # ---------- Orders & Payments ----------
 @api_router.post("/orders/create")
 async def create_order(req: OrderCreateRequest, authorization: Optional[str] = Header(None)):
@@ -538,8 +737,18 @@ async def create_order(req: OrderCreateRequest, authorization: Optional[str] = H
         subtotal += p["price"] * it["quantity"]
     if not items:
         raise HTTPException(400, "Cart empty")
-    shipping = 0.0 if subtotal > 999 else 49.0
-    total = round(subtotal + shipping, 2)
+
+    # Apply coupon (if any) BEFORE shipping, server-side validated
+    coupon_doc = None
+    discount = 0.0
+    if req.coupon_code:
+        coupon_doc, cerr, discount = await _resolve_coupon(req.coupon_code, subtotal)
+        if cerr or not coupon_doc:
+            raise HTTPException(400, cerr or "Invalid coupon")
+
+    discounted_subtotal = round(max(0.0, subtotal - discount), 2)
+    shipping = 0.0 if discounted_subtotal > 999 else 49.0
+    total = round(discounted_subtotal + shipping, 2)
 
     order_id = f"ord_{uuid.uuid4().hex[:14]}"
     rzp_order_id = None
@@ -584,6 +793,8 @@ async def create_order(req: OrderCreateRequest, authorization: Optional[str] = H
         "items": items,
         "address": req.address.model_dump(),
         "subtotal": round(subtotal, 2),
+        "coupon_code": coupon_doc["code"] if coupon_doc else None,
+        "discount": round(discount, 2),
         "shipping": shipping,
         "total": total,
         "payment_method": req.payment_method,
@@ -595,6 +806,13 @@ async def create_order(req: OrderCreateRequest, authorization: Optional[str] = H
         "created_at": now,
     }
     await db.orders.insert_one(doc)
+
+    # Bump coupon usage counter (best-effort — order already saved)
+    if coupon_doc:
+        try:
+            await db.coupons.update_one({"id": coupon_doc["id"]}, {"$inc": {"used_count": 1}})
+        except Exception as _e:
+            logger.warning(f"coupon used_count bump failed: {_e}")
 
     # Best-effort WhatsApp alert to admin (via CallMeBot if configured)
     try:

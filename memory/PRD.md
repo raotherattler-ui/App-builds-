@@ -42,3 +42,16 @@ gracefully falls back to the Customer Support contact.
 No hard cap on sign-ups. Emergent-managed Google Sign-In accepts any valid Google
 account; MongoDB scales into millions of users. Only the admin role is restricted
 (whitelisted emails in `ADMIN_EMAILS`).
+
+## Promo Coupons
+Admin creates discount codes (percent or flat ₹) from the Admin panel with
+optional minimum-order value and optional expiry date, plus an active toggle.
+Customers enter a code at Checkout under "Promo Code"; the backend re-validates
+server-side, applies the discount BEFORE shipping (shipping remains free above
+₹999 of the discounted subtotal), stamps `coupon_code` and `discount` on the
+order, and increments the coupon's `used_count`.
+
+Endpoints:
+- Public:  `POST /api/coupons/validate`
+- Admin:   `GET/POST/PATCH/DELETE /api/admin/coupons[/{id}]`
+

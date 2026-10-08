@@ -1,0 +1,47 @@
+{
+  "summary": "Backend-only tests for the NEW Promo Coupon system (coupons collection + /api/coupons/validate, /api/admin/coupons[*], and coupon-aware /api/orders/create). Created /app/backend/tests/test_avr_coupons.py with 34 focused tests across six classes: (A) admin auth gating [6], (B) create validations incl. duplicate case-insensitive and uppercase normalisation [9], (C) list newest-first with full fields [1], (D) public /coupons/validate incl. invalid/inactive/expired/min-order/percent/flat/clamp/case-insensitive [8], (E) order creation with coupon incl. free-vs-paid shipping, used_count bump, invalid/expired rejection, no-coupon unaffected [5], (F) PATCH toggle/clear/percent-cap + DELETE 404 and removal [5]. Result: 32/34 PASSED (94.1%). The 2 failures expose the SAME real backend bug: _resolve_coupon() crashes with HTTP 500 when a coupon has a stored (non-null) expires_at because MongoDB returns naive datetimes and the code compares them to datetime.now(timezone.utc). All other coupon flows work correctly (admin CRUD, auth gating, validations, duplicate detection, uppercase normalisation, percent/flat math, clamping, min-order gating, inactive gating, PATCH clearing expiry via '', order discount application pre-shipping, used_count increment, order rollback on invalid coupon). CRITICAL BUG — see rca_of_issue.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/coupons/validate  AND  POST /api/orders/create",
+        "issue": "500 Internal Server Error when the referenced coupon has a non-null `expires_at` stored in Mongo. _resolve_coupon() at server.py:603-607 compares `exp` (naive datetime read back from BSON) to `datetime.now(timezone.utc)` (aware) → TypeError: can't compare offset-naive and offset-aware datetimes. Reproduced twice (test_expired_coupon_via_patch, test_order_with_expired_coupon_rejected). Confirmed in /var/log/supervisor/backend.err.log.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_avr_coupons.py",
+    "/app/test_reports/pytest/pytest_iteration_16_coupons.xml"
+  ],
+  "action_items": [
+    "FIX _resolve_coupon() in /app/backend/server.py around line 603 — make `exp` tz-aware before comparing. Minimal patch:\n    exp = c.get('expires_at')\n    if isinstance(exp, datetime):\n        if exp.tzinfo is None:\n            exp = exp.replace(tzinfo=timezone.utc)\n        if exp < datetime.now(timezone.utc):\n            return None, 'This coupon has expired', 0.0\n  Alternative: set tz_aware=True on the AsyncIOMotorClient so Mongo always returns aware datetimes (verify no other callers break).",
+    "After fix, re-run `pytest /app/backend/tests/test_avr_coupons.py -v` — expected 34/34 green.",
+    "Nit (non-blocking): consider also adding the same tz-aware guard anywhere else that compares a Mongo-read datetime to datetime.now(timezone.utc), e.g. in get_current_user (server.py:289) — that path already does it correctly, use as reference."
+  ],
+  "critical_code_review_comments": [
+    "Validations in admin_create_coupon (server.py:645-655) are complete and ordered correctly — missing code, bad discount_type, non-positive discount_value, percent>100, duplicate code (case-insensitive via _normalize_coupon_code) all return correct 400/409.",
+    "_normalize_coupon_code trims + uppercases — stored code is always upper, duplicate detection works for `save10` vs `SAVE10` (verified).",
+    "_compute_coupon_discount correctly clamps to subtotal: min(d, subtotal) → flat ₹500 off a ₹300 cart yields discount 300 / final 0 (verified).",
+    "create_order correctly orders operations: subtotal → coupon discount → shipping on discounted amount → total. coupon_code stored uppercase, used_count $inc:1 after insert_one (verified via Mongo). On invalid coupon, HTTPException raised BEFORE db.orders.insert_one → order count unchanged (verified).",
+    "admin_update_coupon correctly re-validates discount_type/discount_value/percent>100 on PATCH, and `expires_at: ''` explicitly clears to None (verified).",
+    "DELETE returns 404 when deleted_count==0 (verified).",
+    "BUG: _resolve_coupon expiry comparison does not account for naive datetimes returned by BSON. Any coupon with an expiry set triggers 500 when validated or redeemed. This single defect breaks both the public validate endpoint and the entire checkout flow for coupons that have an expiry — including the common case of an admin setting an active future expiry.",
+    "server.py is now ~1840 lines (up from 1623) — still growing past the 'split into routers' threshold flagged in iter 14/15. Non-blocking but a good split candidate (coupons.py / orders.py / admin.py)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avr_coupons.py (new — 34 tests)"
+  ],
+  "success_rate": {"backend": "94.1% (32/34 for coupon feature; 2 failures = SAME bug)", "frontend": "not tested (per request — backend only)"},
+  "seed_data_creation": "Per-test autouse cleanup fixture deletes any coupon whose code starts with 'TEST'. Session-scoped sweep repeats the cleanup at end of session. A session-scoped fixture seeds a dedicated product id='p_TEST_coupon_500' with a stable ₹500 price (and tears it down at session end) — necessary because the live seed product p_ashwagandha has been mutated by prior admin-edit test runs (now ₹250, renamed) and cannot be relied on for deterministic order totals. No production data is touched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Promo Coupons: coupons collection; endpoints POST /api/coupons/validate (public), GET/POST /api/admin/coupons, PATCH/DELETE /api/admin/coupons/{id}. Order flow stamps coupon_code (uppercase) + discount on the order doc, applies discount BEFORE shipping (shipping free when discounted subtotal > 999 else 49), then $inc used_count on the coupon doc after order insert. Known bug: expiry comparison in _resolve_coupon fails with TypeError due to naive Mongo datetimes — see action_items for the one-line fix. Test suite /app/backend/tests/test_avr_coupons.py is deterministic and self-cleaning (TEST_ prefix + session sweep + dedicated p_TEST_coupon_500 product). After the fix, running the full suite should yield 34/34. Pre-existing unrelated failure in test_avr_backend.py::TestCart::test_cart_flow (hardcoded expected subtotal) still persists from iter 12 — unaffected by this change.",
+  "rca_of_issue": "Root cause: In server.py:603-607, _resolve_coupon reads `exp = c.get('expires_at')` from Mongo. Motor/pymongo returns BSON datetimes as NAIVE python datetimes by default (tz_aware=False on the client). The next line, `now = datetime.now(timezone.utc)`, is tz-AWARE. `if exp < now:` therefore raises `TypeError: can't compare offset-naive and offset-aware datetimes`, which FastAPI surfaces as a plain `Internal Server Error` 500. Reproduction (verified end-to-end): 1) create coupon with no expires_at, 2) PATCH expires_at to a past date (parse_coupon_expiry stores a tz-AWARE datetime, Mongo persists it as UTC), 3) POST /api/coupons/validate with that code → 500. Also reproducible via POST /api/orders/create with coupon_code → 500 and NO order is created (good — exception is raised before insert). Mitigation (1-liner): in _resolve_coupon, after `exp = c.get('expires_at')` and inside the isinstance branch, add `if exp.tzinfo is None: exp = exp.replace(tzinfo=timezone.utc)` BEFORE the comparison. Alternatively, construct the motor client with `tz_aware=True`. Impact: ANY coupon with a non-null expires_at is unusable (both for the customer's checkout flow and for the public validation endpoint). High-severity because the admin UI almost certainly will set future expiries by default."
+}

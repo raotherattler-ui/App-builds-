@@ -19,6 +19,34 @@ type Product = {
 
 type AdminUser = { user_id: string; email: string; name: string; picture?: string };
 
+const cpnPill = (theme: Theme) => ({
+  paddingVertical: 8,
+  paddingHorizontal: 14,
+  borderRadius: 999,
+  borderWidth: 1,
+  borderColor: theme.colors.border,
+  backgroundColor: theme.colors.surface,
+});
+const cpnPillActive = (theme: Theme) => ({
+  borderColor: theme.colors.brand,
+  backgroundColor: theme.colors.brandTertiary,
+});
+const cpnPillText = (theme: Theme, active: boolean) => ({
+  color: active ? theme.colors.brand : theme.colors.mutedText,
+  fontFamily: theme.font.text,
+  fontSize: 13,
+});
+const cpnRow = (theme: Theme) => ({
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 6,
+  padding: 12,
+  borderRadius: theme.radius.md,
+  borderWidth: 1,
+  borderColor: theme.colors.border,
+  backgroundColor: theme.colors.surface,
+});
+
 const makeStyles = (theme: Theme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
@@ -146,6 +174,26 @@ export default function AdminScreen() {
   const [plBusy, setPlBusy] = useState(false);
   const [plMsg, setPlMsg] = useState("");
 
+  // Promo Coupons
+  type Coupon = {
+    id: string;
+    code: string;
+    discount_type: "percent" | "flat";
+    discount_value: number;
+    min_order_value: number;
+    expires_at: string | null;
+    active: boolean;
+    used_count: number;
+  };
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [cpnCode, setCpnCode] = useState("");
+  const [cpnType, setCpnType] = useState<"percent" | "flat">("percent");
+  const [cpnValue, setCpnValue] = useState("");
+  const [cpnMinOrder, setCpnMinOrder] = useState("");
+  const [cpnExpires, setCpnExpires] = useState(""); // YYYY-MM-DD, empty = never
+  const [cpnBusy, setCpnBusy] = useState(false);
+  const [cpnMsg, setCpnMsg] = useState("");
+
   const loadPricelist = useCallback(async () => {
     try {
       const r = await api<{ images: string[] }>("/admin/pricelist", { auth: true });
@@ -153,6 +201,65 @@ export default function AdminScreen() {
     } catch { setPlImages([]); }
   }, []);
   useEffect(() => { loadPricelist(); }, [loadPricelist]);
+
+  const loadCoupons = useCallback(async () => {
+    try {
+      const r = await api<{ coupons: Coupon[] }>("/admin/coupons", { auth: true });
+      setCoupons(r.coupons ?? []);
+    } catch { setCoupons([]); }
+  }, []);
+  useEffect(() => { loadCoupons(); }, [loadCoupons]);
+
+  const createCoupon = async () => {
+    const code = cpnCode.trim().toUpperCase();
+    const value = parseFloat(cpnValue);
+    if (!code || !Number.isFinite(value) || value <= 0) {
+      setCpnMsg("Enter a valid code and discount value");
+      return;
+    }
+    setCpnBusy(true); setCpnMsg("");
+    try {
+      await api("/admin/coupons", {
+        method: "POST", auth: true,
+        body: {
+          code,
+          discount_type: cpnType,
+          discount_value: value,
+          min_order_value: parseFloat(cpnMinOrder) || 0,
+          expires_at: cpnExpires.trim() || null,
+          active: true,
+        },
+      });
+      setCpnCode(""); setCpnValue(""); setCpnMinOrder(""); setCpnExpires("");
+      await loadCoupons();
+      setCpnMsg(`Created ${code}`);
+      setTimeout(() => setCpnMsg(""), 2500);
+    } catch (e: any) {
+      setCpnMsg(e?.message ?? "Failed to create coupon");
+    } finally {
+      setCpnBusy(false);
+    }
+  };
+
+  const toggleCoupon = async (c: Coupon) => {
+    try {
+      await api(`/admin/coupons/${c.id}`, {
+        method: "PATCH", auth: true, body: { active: !c.active },
+      });
+      await loadCoupons();
+    } catch (e: any) {
+      setCpnMsg(e?.message ?? "Failed to update");
+    }
+  };
+
+  const deleteCoupon = async (c: Coupon) => {
+    try {
+      await api(`/admin/coupons/${c.id}`, { method: "DELETE", auth: true });
+      await loadCoupons();
+    } catch (e: any) {
+      setCpnMsg(e?.message ?? "Failed to delete");
+    }
+  };
 
   const savePlImages = async (next: string[]) => {
     const trimmed = next.slice(0, 5);
@@ -622,6 +729,125 @@ export default function AdminScreen() {
             </Pressable>
             {merchantMsg ? <Text style={[styles.msg, merchantMsg.includes("Saved") && { color: theme.colors.brand }]}>{merchantMsg}</Text> : null}
             <Text style={styles.hint}>Customers will pay directly to this UPI ID via GPay / PhonePe / Paytm / any UPI app.</Text>
+          </View>
+
+          <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>Promo Coupons ({coupons.length})</Text>
+          <View style={styles.card}>
+            <Text style={styles.hint}>
+              Create seasonal discount codes. Customers enter the code at checkout and the discount is applied before shipping.
+            </Text>
+            <Text style={styles.label}>Code</Text>
+            <TextInput
+              testID="cpn-code"
+              value={cpnCode}
+              onChangeText={(t) => setCpnCode(t.toUpperCase())}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              placeholder="SUMMER10"
+              style={styles.input}
+              placeholderTextColor={theme.colors.mutedText}
+            />
+            <Text style={styles.label}>Discount Type</Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable
+                testID="cpn-type-percent"
+                onPress={() => setCpnType("percent")}
+                style={[cpnPill(theme), cpnType === "percent" && cpnPillActive(theme)]}
+              >
+                <Text style={cpnPillText(theme, cpnType === "percent")}>Percent (%)</Text>
+              </Pressable>
+              <Pressable
+                testID="cpn-type-flat"
+                onPress={() => setCpnType("flat")}
+                style={[cpnPill(theme), cpnType === "flat" && cpnPillActive(theme)]}
+              >
+                <Text style={cpnPillText(theme, cpnType === "flat")}>Flat (₹)</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.label}>{cpnType === "percent" ? "Discount %" : "Discount ₹"}</Text>
+            <TextInput
+              testID="cpn-value"
+              value={cpnValue}
+              onChangeText={setCpnValue}
+              keyboardType="decimal-pad"
+              placeholder={cpnType === "percent" ? "10" : "50"}
+              style={styles.input}
+              placeholderTextColor={theme.colors.mutedText}
+            />
+            <Text style={styles.label}>Minimum Order Value (optional, ₹)</Text>
+            <TextInput
+              testID="cpn-min"
+              value={cpnMinOrder}
+              onChangeText={setCpnMinOrder}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              style={styles.input}
+              placeholderTextColor={theme.colors.mutedText}
+            />
+            <Text style={styles.label}>Expires on (optional, YYYY-MM-DD)</Text>
+            <TextInput
+              testID="cpn-expires"
+              value={cpnExpires}
+              onChangeText={setCpnExpires}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="2026-12-31"
+              style={styles.input}
+              placeholderTextColor={theme.colors.mutedText}
+            />
+            <Pressable
+              testID="cpn-create"
+              onPress={createCoupon}
+              disabled={cpnBusy}
+              style={styles.cta}
+            >
+              {cpnBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Create Coupon</Text>}
+            </Pressable>
+            {cpnMsg ? (
+              <Text style={[styles.msg, cpnMsg.toLowerCase().startsWith("created") && { color: theme.colors.brand }]}>
+                {cpnMsg}
+              </Text>
+            ) : null}
+
+            {coupons.length > 0 ? (
+              <View style={{ marginTop: theme.spacing.md, gap: 8 }}>
+                {coupons.map((c) => (
+                  <View key={c.id} style={cpnRow(theme)} testID={`coupon-${c.code}`}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.onSurface, fontFamily: theme.font.display, fontSize: 15 }}>
+                        {c.code}{c.active ? "" : "  · Inactive"}
+                      </Text>
+                      <Text style={{ color: theme.colors.mutedText, fontFamily: theme.font.text, fontSize: 12, marginTop: 2 }}>
+                        {c.discount_type === "percent" ? `${c.discount_value}% off` : `₹${c.discount_value.toFixed(0)} off`}
+                        {c.min_order_value > 0 ? ` · min ₹${c.min_order_value.toFixed(0)}` : ""}
+                        {c.expires_at ? ` · exp ${(c.expires_at ?? "").slice(0, 10)}` : ""}
+                        {c.used_count > 0 ? ` · used ${c.used_count}` : ""}
+                      </Text>
+                    </View>
+                    <Pressable
+                      testID={`cpn-toggle-${c.code}`}
+                      onPress={() => toggleCoupon(c)}
+                      style={{ padding: 8 }}
+                      hitSlop={6}
+                    >
+                      <Feather
+                        name={c.active ? "toggle-right" : "toggle-left"}
+                        size={22}
+                        color={c.active ? theme.colors.brand : theme.colors.mutedText}
+                      />
+                    </Pressable>
+                    <Pressable
+                      testID={`cpn-delete-${c.code}`}
+                      onPress={() => deleteCoupon(c)}
+                      style={{ padding: 8 }}
+                      hitSlop={6}
+                    >
+                      <Feather name="trash-2" size={18} color={theme.colors.error} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
 
           <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>WhatsApp Order Alerts</Text>
