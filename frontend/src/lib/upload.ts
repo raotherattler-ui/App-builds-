@@ -5,8 +5,9 @@ import { getToken } from "./api";
 
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "";
 
-/** Picks an image from the device gallery, uploads it, returns the public URL. */
-export async function pickAndUploadImage(): Promise<{ url: string } | null> {
+/** Picks an image from the device gallery, uploads it, returns the public URL.
+ *  `endpoint` defaults to the admin upload; customers use "/api/upload/review". */
+export async function pickAndUploadImage(endpoint: string = "/api/upload"): Promise<{ url: string } | null> {
   // 1) Ask permission on native
   if (Platform.OS !== "web") {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -26,7 +27,7 @@ export async function pickAndUploadImage(): Promise<{ url: string } | null> {
 
   // 3) Upload — different body shape for web vs native
   const token = await getToken();
-  const url = `${BASE}/api/upload`;
+  const url = `${BASE}${endpoint}`;
   if (Platform.OS === "web") {
     const blob = await (await fetch(uri)).blob();
     const form = new FormData();

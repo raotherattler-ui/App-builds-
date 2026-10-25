@@ -1,14 +1,17 @@
 import { useEffect, useState , useMemo} from "react";
 import {
   View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { api } from "@/src/lib/api";
+import { pickAndUploadImage } from "@/src/lib/upload";
 import { useTheme, type Theme } from "@/src/theme";
+
+const MAX_PHOTOS = 3;
 
 type Item = { product_id: string; name: string; image: string; quantity: number };
 type Order = { id: string; items: Item[] };
@@ -24,6 +27,22 @@ export default function ReviewScreen() {
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [permDenied, setPermDenied] = useState(false);
+
+  const addPhoto = async () => {
+    if (photos.length >= MAX_PHOTOS) return;
+    setUploading(true); setMsg("");
+    try {
+      const r = await pickAndUploadImage("/api/upload/review");
+      if (r) setPhotos((prev) => [...prev, r.url].slice(0, MAX_PHOTOS));
+    } catch (e: any) {
+      const denied = String(e?.message ?? "").includes("permission");
+      setPermDenied(denied);
+      setMsg(denied ? "Photo access is off. Allow it in Settings to add pictures." : "Photo upload failed. Try again.");
+    } finally { setUploading(false); }
+  };
 
   useEffect(() => {
     if (orderId) {
@@ -43,7 +62,7 @@ export default function ReviewScreen() {
     try {
       await api("/reviews", {
         method: "POST", auth: true,
-        body: { product_id: selected.product_id, rating, comment },
+        body: { product_id: selected.product_id, rating, comment, photos },
       });
       setMsg("Thanks for your review!");
       setTimeout(() => router.back(), 800);
@@ -110,7 +129,39 @@ export default function ReviewScreen() {
                 numberOfLines={4}
                 style={styles.input}
               />
+              <Text style={[styles.h, { marginTop: 16 }]}>Add photos (up to {MAX_PHOTOS})</Text>
+              <View style={styles.photoRow}>
+                {photos.map((u, i) => (
+                  <View key={u} style={styles.photoWrap}>
+                    <Image source={u} style={styles.photo} contentFit="cover" />
+                    <Pressable
+                      testID={`remove-review-photo-${i}`}
+                      onPress={() => setPhotos((prev) => prev.filter((x) => x !== u))}
+                      hitSlop={8}
+                      style={styles.photoRemove}
+                    >
+                      <Feather name="x" size={12} color="#fff" />
+                    </Pressable>
+                  </View>
+                ))}
+                {photos.length < MAX_PHOTOS ? (
+                  <Pressable testID="add-review-photo" onPress={addPhoto} disabled={uploading} style={styles.photoAdd}>
+                    {uploading ? <ActivityIndicator color={theme.colors.brand} /> : (
+                      <>
+                        <Feather name="camera" size={20} color={theme.colors.brand} />
+                        <Text style={styles.photoAddText}>Add</Text>
+                      </>
+                    )}
+                  </Pressable>
+                ) : null}
+              </View>
               {msg ? <Text style={[styles.msg, msg.includes("Thanks") && { color: theme.colors.brand }]}>{msg}</Text> : null}
+              {permDenied ? (
+                <Pressable testID="open-settings" onPress={() => Linking.openSettings()} style={styles.settingsBtn}>
+                  <Feather name="settings" size={14} color={theme.colors.brand} />
+                  <Text style={styles.photoAddText}>Open Settings</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 testID="submit-review"
                 onPress={submit}
@@ -150,6 +201,23 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
     backgroundColor: theme.colors.surface, fontFamily: theme.font.text, color: theme.colors.onSurface,
   },
   msg: { color: theme.colors.error, fontFamily: theme.font.text, marginTop: 6 },
+  photoRow: { flexDirection: "row", gap: 10, marginTop: 6, flexWrap: "wrap" },
+  photoWrap: { width: 72, height: 72 },
+  photo: { width: 72, height: 72, borderRadius: theme.radius.md, backgroundColor: theme.colors.brandTertiary },
+  photoRemove: {
+    position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center",
+  },
+  photoAdd: {
+    width: 72, height: 72, borderRadius: theme.radius.md, borderWidth: 1, borderStyle: "dashed",
+    borderColor: theme.colors.brand, alignItems: "center", justifyContent: "center", gap: 2,
+  },
+  photoAddText: { fontSize: 11, color: theme.colors.brand, fontFamily: theme.font.text },
+  settingsBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start",
+    marginTop: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+    borderWidth: 1, borderColor: theme.colors.brand,
+  },
   cta: { marginTop: 16, backgroundColor: theme.colors.brand, paddingVertical: 14, borderRadius: 999, alignItems: "center" },
   ctaText: { color: "#fff", fontFamily: theme.font.text, fontSize: 15 },
 });

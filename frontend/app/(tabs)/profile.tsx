@@ -60,6 +60,7 @@ export default function Profile() {
 
   const rows: { icon: any; label: string; onPress: () => void; testID: string }[] = [
     { icon: "package", label: "My Orders", onPress: () => router.push("/(tabs)/orders"), testID: "profile-orders" },
+    { icon: "heart", label: "My Wishlist", onPress: () => router.push("/wishlist"), testID: "profile-wishlist" },
     { icon: "help-circle", label: "Customer Support", onPress: () => router.push("/support"), testID: "profile-support" },
     { icon: "shield", label: "Privacy Policy", onPress: () => router.push("/privacy"), testID: "profile-privacy" },
   ];

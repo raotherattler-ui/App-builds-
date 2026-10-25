@@ -73,3 +73,14 @@ Endpoints:
   login screen, Home header, Privacy Policy meta line.
 - Home: removed the stock "Pure remedies" hero image; header (logo + name) sits directly above the News Banner.
 - Fixed stale subtotal assertion in `tests/test_avr_backend.py::test_cart_flow` (now computed from live prices).
+
+## Wishlist + Back-in-stock (Oct 2026)
+- Heart on Home product cards + Product detail header; Profile → "My Wishlist" screen (`app/wishlist.tsx`).
+- When admin flips a product from out-of-stock → in-stock (stock toggle or product edit), every wishlister gets
+  an in-app alert (Home banner, `stock_alerts` collection) and a real email (Emergent managed email, `email_service.py`).
+- Endpoints: `GET /api/wishlist`, `POST|DELETE /api/wishlist/{product_id}`, `GET /api/stock-alerts`, `POST /api/stock-alerts/seen`.
+
+## Photo Reviews (Oct 2026)
+- Only buyers (order status paid/shipped/delivered) can review; up to 3 photos per review via `POST /api/upload/review`.
+- `GET /api/products/{id}/reviews?rating=N` returns reviews + per-star counts; UI has star filter chips,
+  "Verified Buyer" badge, photo strip and full-screen viewer (`src/components/ReviewsSection.tsx`).

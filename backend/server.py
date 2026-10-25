@@ -17,6 +17,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
+from email_service import send_email, back_in_stock_html
 
 try:
     import razorpay  # type: ignore
@@ -271,6 +272,11 @@ class ReviewCreateRequest(BaseModel):
     product_id: str
     rating: int  # 1..5
     comment: str = ""
+    photos: List[str] = []  # up to 3 uploaded image URLs (owned by the reviewer)
+
+
+PURCHASED_STATUSES = ["paid", "shipped", "delivered"]
+MAX_REVIEW_PHOTOS = 3
 
 
 class AuthSessionRequest(BaseModel):
@@ -418,8 +424,10 @@ async def delete_account(authorization: Optional[str] = Header(None)):
         {"$set": {"user_name": "Deleted user", "anonymised_at": now_iso}},
     )
 
-    # 3. Hard-delete cart + sessions + user profile
+    # 3. Hard-delete cart + wishlist + alerts + sessions + user profile
     await db.carts.delete_many({"user_id": uid})
+    await db.wishlist.delete_many({"user_id": uid})
+    await db.stock_alerts.delete_many({"user_id": uid})
     await db.user_sessions.delete_many({"user_id": uid})
     await db.users.delete_one({"user_id": uid})
 
@@ -962,12 +970,43 @@ async def user_cancel_order(order_id: str, authorization: Optional[str] = Header
 
 # ---------- Reviews ----------
 @api_router.get("/products/{product_id}/reviews")
-async def get_reviews(product_id: str):
-    docs = await db.reviews.find({"product_id": product_id}, {"_id": 0}).sort("created_at", -1).to_list(100)
+async def get_reviews(product_id: str, rating: Optional[int] = None):
+    """Returns reviews (optionally filtered by star) + per-star counts for the filter chips."""
+    q: dict = {"product_id": product_id}
+    if rating and 1 <= rating <= 5:
+        q["rating"] = rating
+    docs = await db.reviews.find(q, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(200)
     for d in docs:
         if isinstance(d.get("created_at"), datetime):
             d["created_at"] = d["created_at"].isoformat()
-    return {"reviews": docs}
+        d["photos"] = d.get("photos") or []
+        # Reviews can only be written after purchase, so every review is a verified buyer.
+        d["verified"] = d.get("verified", True)
+    agg = await db.reviews.aggregate([
+        {"$match": {"product_id": product_id}},
+        {"$group": {"_id": "$rating", "n": {"$sum": 1}}},
+    ]).to_list(10)
+    counts = {str(s): 0 for s in range(1, 6)}
+    for a in agg:
+        if a["_id"] in (1, 2, 3, 4, 5):
+            counts[str(a["_id"])] = a["n"]
+    return {"reviews": docs, "counts": counts, "total": sum(counts.values())}
+
+
+async def _validate_review_photos(urls: List[str], user_id: str) -> List[str]:
+    """Only accept images this user uploaded via /api/upload/review (max 3)."""
+    clean: List[str] = []
+    for u in (urls or [])[:MAX_REVIEW_PHOTOS]:
+        u = (u or "").strip()
+        if "/api/files/" not in u:
+            raise HTTPException(400, "Invalid photo")
+        path = u.split("/api/files/", 1)[1].split("?", 1)[0]
+        doc = await db.uploads.find_one({"path": path, "owner_id": user_id}, {"_id": 0, "path": 1})
+        if not doc:
+            raise HTTPException(400, "Invalid photo")
+        if u not in clean:
+            clean.append(u)
+    return clean
 
 
 @api_router.post("/reviews")
@@ -975,31 +1014,37 @@ async def create_review(req: ReviewCreateRequest, authorization: Optional[str] =
     user = await get_current_user(authorization)
     if req.rating < 1 or req.rating > 5:
         raise HTTPException(400, "Rating must be 1-5")
-    # ensure user has a paid order containing this product
+    if len(req.photos or []) > MAX_REVIEW_PHOTOS:
+        raise HTTPException(400, f"Up to {MAX_REVIEW_PHOTOS} photos per review")
+    # ensure user has a paid/shipped/delivered order containing this product
     purchased = await db.orders.find_one({
         "user_id": user["user_id"],
-        "status": "paid",
+        "status": {"$in": PURCHASED_STATUSES},
         "items.product_id": req.product_id,
     })
     if not purchased:
         raise HTTPException(403, "You can review only after purchasing this product")
+    photos = await _validate_review_photos(req.photos, user["user_id"])
     existing = await db.reviews.find_one({"product_id": req.product_id, "user_id": user["user_id"]})
-    review = {
-        "id": f"rev_{uuid.uuid4().hex[:12]}",
-        "product_id": req.product_id,
-        "user_id": user["user_id"],
-        "user_name": user.get("name", "Customer"),
-        "rating": req.rating,
-        "comment": req.comment,
-        "created_at": datetime.now(timezone.utc),
-    }
+    now = datetime.now(timezone.utc)
     if existing:
         await db.reviews.update_one(
             {"product_id": req.product_id, "user_id": user["user_id"]},
-            {"$set": {"rating": req.rating, "comment": req.comment, "created_at": review["created_at"]}},
+            {"$set": {"rating": req.rating, "comment": req.comment, "photos": photos,
+                      "verified": True, "created_at": now}},
         )
     else:
-        await db.reviews.insert_one(review)
+        await db.reviews.insert_one({
+            "id": f"rev_{uuid.uuid4().hex[:12]}",
+            "product_id": req.product_id,
+            "user_id": user["user_id"],
+            "user_name": user.get("name", "Customer"),
+            "rating": req.rating,
+            "comment": req.comment,
+            "photos": photos,
+            "verified": True,
+            "created_at": now,
+        })
     return {"ok": True}
 
 
@@ -1008,7 +1053,7 @@ async def review_eligibility(product_id: str, authorization: Optional[str] = Hea
     user = await get_current_user(authorization)
     purchased = await db.orders.find_one({
         "user_id": user["user_id"],
-        "status": "paid",
+        "status": {"$in": PURCHASED_STATUSES},
         "items.product_id": product_id,
     })
     existing = await db.reviews.find_one({"product_id": product_id, "user_id": user["user_id"]}, {"_id": 0})
@@ -1237,12 +1282,15 @@ async def admin_create_product(req: ProductUpsertRequest, authorization: Optiona
 @api_router.put("/admin/products/{product_id}")
 async def admin_update_product(product_id: str, req: ProductUpsertRequest, authorization: Optional[str] = Header(None)):
     await require_admin(authorization)
+    before = await db.products.find_one({"id": product_id}, {"_id": 0, "in_stock": 1})
     doc = req.model_dump()
     doc["id"] = product_id
     primary, imgs = _normalize_images(doc.get("image", ""), doc.get("images", []))
     doc["image"] = primary
     doc["images"] = imgs
     await db.products.update_one({"id": product_id}, {"$set": doc}, upsert=True)
+    if before and before.get("in_stock") is False and doc.get("in_stock"):
+        await _notify_back_in_stock(product_id)
     return {"ok": True, "product": doc}
 
 
@@ -1459,6 +1507,20 @@ _EXT_MAP = {
 @api_router.post("/upload")
 async def upload_image(file: UploadFile = File(...), authorization: Optional[str] = Header(None)):
     user = await require_admin(authorization)
+    return await _store_upload(user, file)
+
+
+@api_router.post("/upload/review")
+async def upload_review_photo(file: UploadFile = File(...), authorization: Optional[str] = Header(None)):
+    """Review photos — any customer with at least one purchased order may upload."""
+    user = await get_current_user(authorization)
+    bought = await db.orders.find_one({"user_id": user["user_id"], "status": {"$in": PURCHASED_STATUSES}})
+    if not bought:
+        raise HTTPException(403, "Only customers who bought a product can add review photos")
+    return await _store_upload(user, file)
+
+
+async def _store_upload(user: dict, file: UploadFile) -> dict:
     content = await file.read()
     if not content:
         raise HTTPException(400, "Empty file")
@@ -1593,10 +1655,99 @@ class StockToggleRequest(BaseModel):
 @api_router.put("/admin/products/{product_id}/stock")
 async def admin_toggle_stock(product_id: str, req: StockToggleRequest, authorization: Optional[str] = Header(None)):
     await require_admin(authorization)
-    r = await db.products.update_one({"id": product_id}, {"$set": {"in_stock": req.in_stock}})
-    if r.matched_count == 0:
+    before = await db.products.find_one({"id": product_id}, {"_id": 0, "in_stock": 1})
+    if not before:
         raise HTTPException(404, "Product not found")
-    return {"ok": True, "in_stock": req.in_stock}
+    await db.products.update_one({"id": product_id}, {"$set": {"in_stock": req.in_stock}})
+    notified = 0
+    if req.in_stock and before.get("in_stock") is False:
+        notified = await _notify_back_in_stock(product_id)
+    return {"ok": True, "in_stock": req.in_stock, "notified": notified}
+
+
+# ---------- Wishlist + Back-in-stock alerts ----------
+async def _notify_back_in_stock(product_id: str) -> int:
+    """Create in-app alerts for everyone who wishlisted this product and email them (non-blocking)."""
+    import asyncio as _asyncio
+    product = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        return 0
+    entries = await db.wishlist.find({"product_id": product_id}, {"_id": 0}).to_list(5000)
+    now = datetime.now(timezone.utc)
+    count = 0
+    for w in entries:
+        await db.stock_alerts.update_one(
+            {"user_id": w["user_id"], "product_id": product_id, "seen": False},
+            {"$set": {"created_at": now},
+             "$setOnInsert": {"id": f"sa_{uuid.uuid4().hex[:12]}", "user_id": w["user_id"],
+                              "product_id": product_id, "seen": False}},
+            upsert=True,
+        )
+        u = await db.users.find_one({"user_id": w["user_id"]}, {"_id": 0, "email": 1, "name": 1})
+        if u and u.get("email") and "@" in u["email"] and not u["email"].endswith("@avr.local"):
+            subject, html = back_in_stock_html(u.get("name", ""), product.get("name", "Your item"),
+                                               float(product.get("price", 0) or 0))
+            _asyncio.create_task(send_email(to=u["email"], subject=subject, html=html))
+        count += 1
+    logger.info(f"Back-in-stock: product={product_id} notified={count}")
+    return count
+
+
+@api_router.get("/wishlist")
+async def get_wishlist(authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    entries = await db.wishlist.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    alerts = await db.stock_alerts.find({"user_id": user["user_id"], "seen": False}, {"_id": 0, "product_id": 1}).to_list(500)
+    alert_ids = {a["product_id"] for a in alerts}
+    items = []
+    for e in entries:
+        p = await db.products.find_one({"id": e["product_id"]}, {"_id": 0})
+        if p:
+            items.append({"product": p, "back_in_stock": e["product_id"] in alert_ids})
+    return {"items": items, "product_ids": [i["product"]["id"] for i in items]}
+
+
+@api_router.post("/wishlist/{product_id}")
+async def add_wishlist(product_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    if not await db.products.find_one({"id": product_id}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Product not found")
+    await db.wishlist.update_one(
+        {"user_id": user["user_id"], "product_id": product_id},
+        {"$setOnInsert": {"user_id": user["user_id"], "product_id": product_id,
+                          "created_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"ok": True, "saved": True}
+
+
+@api_router.delete("/wishlist/{product_id}")
+async def remove_wishlist(product_id: str, authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    await db.wishlist.delete_one({"user_id": user["user_id"], "product_id": product_id})
+    await db.stock_alerts.update_many(
+        {"user_id": user["user_id"], "product_id": product_id, "seen": False}, {"$set": {"seen": True}}
+    )
+    return {"ok": True, "saved": False}
+
+
+@api_router.get("/stock-alerts")
+async def get_stock_alerts(authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    alerts = await db.stock_alerts.find({"user_id": user["user_id"], "seen": False}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    out = []
+    for a in alerts:
+        p = await db.products.find_one({"id": a["product_id"]}, {"_id": 0, "id": 1, "name": 1, "image": 1, "price": 1, "in_stock": 1})
+        if p and p.get("in_stock", True):
+            out.append({"id": a["id"], "product": p})
+    return {"alerts": out}
+
+
+@api_router.post("/stock-alerts/seen")
+async def mark_stock_alerts_seen(authorization: Optional[str] = Header(None)):
+    user = await get_current_user(authorization)
+    await db.stock_alerts.update_many({"user_id": user["user_id"], "seen": False}, {"$set": {"seen": True}})
+    return {"ok": True}
 
 
 @api_router.get("/")

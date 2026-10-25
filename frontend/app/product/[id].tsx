@@ -9,6 +9,9 @@ import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { api } from "@/src/lib/api";
 import { LinkifiedText } from "@/src/components/LinkifiedText";
+import { ReviewsSection } from "@/src/components/ReviewsSection";
+import { HeartButton } from "@/src/components/HeartButton";
+import { useWishlist } from "@/src/lib/useWishlist";
 import { useTheme, type Theme } from "@/src/theme";
 
 type Product = {
@@ -16,7 +19,6 @@ type Product = {
   image: string; images?: string[]; category: string; benefits: string[]; ingredients: string[];
   avg_rating: number; rating_count: number; in_stock?: boolean;
 };
-type Review = { id: string; rating: number; comment: string; user_name: string; created_at: string };
 
 export default function ProductDetail() {
   const theme = useTheme();
@@ -25,21 +27,17 @@ export default function ProductDetail() {
 
   const { id } = useLocalSearchParams<{ id: string }>();
   const [p, setP] = useState<Product | null>(null);
-  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [heroIdx, setHeroIdx] = useState(0);
   const heroRef = useRef<FlatList<string>>(null);
+  const wishlist = useWishlist();
 
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [pr, rr] = await Promise.all([
-        api<{ product: Product }>(`/products/${id}`),
-        api<{ reviews: Review[] }>(`/products/${id}/reviews`),
-      ]);
+      const pr = await api<{ product: Product }>(`/products/${id}`);
       setP(pr.product);
-      setReviews(rr.reviews);
     } finally { setLoading(false); }
   }, [id]);
 
@@ -74,9 +72,16 @@ export default function ProductDetail() {
         <Pressable onPress={() => router.back()} testID="back-btn" style={styles.iconBtn}>
           <Feather name="arrow-left" size={20} color={theme.colors.onSurface} />
         </Pressable>
-        <Pressable onPress={() => router.push("/support")} style={styles.iconBtn}>
-          <Feather name="help-circle" size={20} color={theme.colors.onSurface} />
-        </Pressable>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <HeartButton
+            saved={wishlist.ids.has(p.id)}
+            onPress={() => wishlist.toggle(p.id)}
+            testID="product-heart"
+          />
+          <Pressable onPress={() => router.push("/support")} style={styles.iconBtn}>
+            <Feather name="help-circle" size={20} color={theme.colors.onSurface} />
+          </Pressable>
+        </View>
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
         <View style={styles.heroBg}>
@@ -149,27 +154,7 @@ export default function ProductDetail() {
             </View>
           ) : null}
 
-          <View style={styles.section}>
-            <Text style={styles.h}>Reviews</Text>
-            {reviews.length === 0 ? (
-              <Text style={styles.iTxt}>No reviews yet — buy and be the first!</Text>
-            ) : (
-              reviews.map((r) => (
-                <View key={r.id} style={styles.review}>
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                    <Text style={styles.rName}>{r.user_name}</Text>
-                    <View style={{ flexDirection: "row" }}>
-                      {[1, 2, 3, 4, 5].map((s) => (
-                        <Feather key={s} name="star" size={12}
-                          color={s <= r.rating ? theme.colors.brandSecondary : theme.colors.border} />
-                      ))}
-                    </View>
-                  </View>
-                  {r.comment ? <LinkifiedText style={styles.rTxt}>{r.comment}</LinkifiedText> : null}
-                </View>
-              ))
-            )}
-          </View>
+          <ReviewsSection productId={p.id} />
         </View>
       </ScrollView>
 
@@ -234,9 +219,6 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
   bRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   bTxt: { fontSize: 14, color: theme.colors.onSurfaceSecondary, fontFamily: theme.font.text },
   iTxt: { fontSize: 13, color: theme.colors.mutedText, fontFamily: theme.font.text },
-  review: { paddingVertical: theme.spacing.sm, borderBottomWidth: 1, borderBottomColor: theme.colors.divider, gap: 4 },
-  rName: { fontSize: 13, color: theme.colors.onSurface, fontFamily: theme.font.text },
-  rTxt: { fontSize: 13, color: theme.colors.onSurfaceSecondary, fontFamily: theme.font.text },
   stickyBar: {
     position: "absolute", left: 0, right: 0, bottom: 0,
     padding: theme.spacing.lg, paddingBottom: theme.spacing.xl,

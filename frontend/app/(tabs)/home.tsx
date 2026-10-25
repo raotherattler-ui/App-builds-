@@ -10,6 +10,9 @@ import { api } from "@/src/lib/api";
 import { useTheme, type Theme } from "@/src/theme";
 import { LeafBackground } from "@/src/components/LeafBackground";
 import { AppLogo } from "@/src/components/AppLogo";
+import { HeartButton } from "@/src/components/HeartButton";
+import { StockAlertBanner } from "@/src/components/StockAlertBanner";
+import { useWishlist } from "@/src/lib/useWishlist";
 
 type P = {
   id: string; name: string; tagline: string; price: number; image: string;
@@ -27,6 +30,7 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [waLink, setWaLink] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ image_url: string; caption: string } | null>(null);
+  const wishlist = useWishlist();
 
   const load = useCallback(async (selected: string) => {
     try {
@@ -60,6 +64,7 @@ export default function Home() {
 
   const Header = (
     <View>
+      <StockAlertBanner />
       {banner ? (
         <View style={styles.newsBannerWrap} testID="news-banner">
           <Image source={banner.image_url} style={styles.newsBannerImg} contentFit="cover" transition={200} />
@@ -141,6 +146,14 @@ export default function Home() {
                     <Text style={styles.oosText}>OUT OF STOCK</Text>
                   </View>
                 ) : null}
+                <View style={styles.heartPos}>
+                  <HeartButton
+                    size={16}
+                    saved={wishlist.ids.has(item.id)}
+                    onPress={() => wishlist.toggle(item.id)}
+                    testID={`heart-${item.id}`}
+                  />
+                </View>
               </View>
               <View style={{ padding: theme.spacing.md, gap: 4 }}>
                 <Text numberOfLines={1} style={styles.cardName}>{item.name}</Text>
@@ -230,6 +243,7 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   oosText: { color: "#fff", fontSize: 12, letterSpacing: 1.2, fontFamily: theme.font.text },
+  heartPos: { position: "absolute", top: 8, right: 8 },
   waFab: {
     position: "absolute", right: 16, bottom: 20,
     width: 54, height: 54, borderRadius: 999,
