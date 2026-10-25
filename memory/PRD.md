@@ -67,3 +67,9 @@ Only http(s) URLs are accepted server-side.
 Endpoints:
 - Public: `GET /api/news-banner`
 - Admin:  `GET/PUT /api/admin/news-banner`
+
+## Branding (Oct 2026)
+- App icon (`assets/images/icon.png`) shown as a rounded tile next to the app name via `src/components/AppLogo.tsx`:
+  login screen, Home header, Privacy Policy meta line.
+- Home: removed the stock "Pure remedies" hero image; header (logo + name) sits directly above the News Banner.
+- Fixed stale subtotal assertion in `tests/test_avr_backend.py::test_cart_flow` (now computed from live prices).

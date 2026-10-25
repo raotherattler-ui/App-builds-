@@ -8,6 +8,7 @@ import { router } from "expo-router";
 import { useAuth } from "@/src/lib/AuthContext";
 import { useTheme, type Theme } from "@/src/theme";
 import { LeafBackground } from "@/src/components/LeafBackground";
+import { AppLogo } from "@/src/components/AppLogo";
 
 export default function AuthScreen() {
   const theme = useTheme();
@@ -39,9 +40,7 @@ export default function AuthScreen() {
       <LeafBackground density={16} intensity="vivid" />
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <View style={styles.top}>
-          <View style={styles.logoBadge}>
-            <Feather name="feather" size={22} color={theme.colors.onBrandPrimary} />
-          </View>
+          <AppLogo size={44} />
           <Text style={styles.brand}>avr organics</Text>
         </View>
         <View style={styles.bottom}>
@@ -85,11 +84,6 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.surfaceInverse },
   safe: { flex: 1, justifyContent: "space-between", padding: theme.spacing.xl },
   top: { flexDirection: "row", alignItems: "center", gap: theme.spacing.md },
-  logoBadge: {
-    width: 38, height: 38, borderRadius: 12,
-    backgroundColor: theme.colors.brand,
-    alignItems: "center", justifyContent: "center",
-  },
   brand: { color: "#9ACD32", fontSize: 20, fontFamily: theme.font.display, letterSpacing: 0.5, textShadowColor: "rgba(0,0,0,0.45)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   bottom: { gap: theme.spacing.md },
   title: { color: "#fff", fontSize: 34, lineHeight: 38, fontFamily: theme.font.display },

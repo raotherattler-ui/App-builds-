@@ -6,10 +6,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { Feather, FontAwesome } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
 import { api } from "@/src/lib/api";
 import { useTheme, type Theme } from "@/src/theme";
 import { LeafBackground } from "@/src/components/LeafBackground";
+import { AppLogo } from "@/src/components/AppLogo";
 
 type P = {
   id: string; name: string; tagline: string; price: number; image: string;
@@ -60,17 +60,6 @@ export default function Home() {
 
   const Header = (
     <View>
-      <View style={styles.hero}>
-        <Image
-          source="https://images.pexels.com/photos/30946766/pexels-photo-30946766.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-        />
-        <LinearGradient colors={["transparent", "rgba(43,46,42,0.75)"]} style={StyleSheet.absoluteFill} />
-        <View style={styles.heroOverlay}>
-          <Text style={styles.heroTitle}>Pure remedies,{"\n"}rooted in tradition.</Text>
-        </View>
-      </View>
       {banner ? (
         <View style={styles.newsBannerWrap} testID="news-banner">
           <Image source={banner.image_url} style={styles.newsBannerImg} contentFit="cover" transition={200} />
@@ -106,9 +95,12 @@ export default function Home() {
     <SafeAreaView style={styles.root} edges={["top"]} testID="home-screen">
       <LeafBackground density={14} intensity="normal" />
       <View style={styles.headerBar}>
-        <View>
-          <Text style={styles.brand}>avr organics</Text>
-          <Text style={styles.sub}>Nature&apos;s wisdom, delivered.</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1 }}>
+          <AppLogo size={40} />
+          <View style={{ flexShrink: 1 }}>
+            <Text style={styles.brand}>avr organics</Text>
+            <Text style={styles.sub}>Nature&apos;s wisdom, delivered.</Text>
+          </View>
         </View>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <Pressable testID="pricelist-icon" onPress={() => router.push("/pricelist")} style={styles.supportBtn}>
@@ -194,15 +186,6 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
     backgroundColor: theme.colors.surfaceSecondary,
     alignItems: "center", justifyContent: "center",
   },
-  hero: {
-    marginHorizontal: theme.spacing.lg,
-    height: 160,
-    borderRadius: theme.radius.lg,
-    overflow: "hidden",
-    marginBottom: theme.spacing.md,
-  },
-  heroOverlay: { flex: 1, padding: theme.spacing.lg, justifyContent: "flex-end" },
-  heroTitle: { color: "#fff", fontSize: 22, lineHeight: 26, fontFamily: theme.font.display },
   newsBannerWrap: {
     marginHorizontal: theme.spacing.lg,
     marginBottom: theme.spacing.md,

@@ -5,6 +5,7 @@ import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api } from "@/src/lib/api";
 import { useTheme, type Theme } from "@/src/theme";
+import { AppLogo } from "@/src/components/AppLogo";
 
 type PrivacyPayload = {
   last_updated: string;
@@ -53,7 +54,10 @@ export default function PrivacyScreen() {
         <View style={styles.center}><ActivityIndicator color={theme.colors.brand} /></View>
       ) : p ? (
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.meta}>AVR Organics · Last updated: {p.last_updated}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <AppLogo size={24} />
+            <Text style={[styles.meta, { flexShrink: 1 }]}>AVR Organics · Last updated: {p.last_updated}</Text>
+          </View>
           <Text style={styles.body}>{p.text}</Text>
           <View style={{ height: 1, backgroundColor: theme.colors.divider, marginVertical: theme.spacing.lg }} />
           <Pressable

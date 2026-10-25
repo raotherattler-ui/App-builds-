@@ -98,8 +98,9 @@ class TestCart:
         assert r.status_code == 200
         d = r.json()
         assert len(d["items"]) == 2
-        # subtotal should be 499*2 + 249 = 1247
-        assert d["subtotal"] == 1247.0
+        # subtotal must equal sum of live product price * qty (prices are admin-editable)
+        expected = sum(it["product"]["price"] * it["quantity"] for it in d["items"])
+        assert round(d["subtotal"], 2) == round(expected, 2)
         for it in d["items"]:
             assert "product" in it and it["product"]["id"] == it["product_id"]
 
