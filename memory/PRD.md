@@ -55,3 +55,15 @@ Endpoints:
 - Public:  `POST /api/coupons/validate`
 - Admin:   `GET/POST/PATCH/DELETE /api/admin/coupons[/{id}]`
 
+
+
+## News Banner
+Single admin-managed JPG/PNG banner shown at the top of the Home products
+screen (between the hero and category chips). Admin uploads via the built-in
+image picker, writes an optional caption, and toggles visibility. Public
+endpoint returns an empty URL when hidden so the client simply skips the banner.
+Only http(s) URLs are accepted server-side.
+
+Endpoints:
+- Public: `GET /api/news-banner`
+- Admin:  `GET/PUT /api/admin/news-banner`

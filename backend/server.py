@@ -1663,6 +1663,57 @@ async def admin_set_pricelist_images(req: PriceListImagesRequest, authorization:
     return {"ok": True, "images": images}
 
 
+# ---------- News Banner (admin-editable, shown on Home) ----------
+class NewsBannerRequest(BaseModel):
+    image_url: str = ""
+    caption: str = ""
+    active: bool = True
+
+
+async def _get_news_banner() -> dict:
+    s = await db.settings.find_one({"key": "news_banner"}, {"_id": 0}) or {}
+    return {
+        "image_url": (s.get("image_url") or "").strip(),
+        "caption": (s.get("caption") or "").strip(),
+        "active": bool(s.get("active", True)),
+    }
+
+
+@api_router.get("/news-banner")
+async def get_news_banner():
+    """Public endpoint — Home screen fetches this. Returns empty image_url when nothing is set
+    or when admin has toggled it off, so the client just hides the banner."""
+    b = await _get_news_banner()
+    if not b["active"]:
+        return {"image_url": "", "caption": "", "active": False}
+    return b
+
+
+@api_router.get("/admin/news-banner")
+async def admin_get_news_banner(authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    return await _get_news_banner()
+
+
+@api_router.put("/admin/news-banner")
+async def admin_set_news_banner(req: NewsBannerRequest, authorization: Optional[str] = Header(None)):
+    await require_admin(authorization)
+    image_url = (req.image_url or "").strip()
+    if image_url and not (image_url.startswith("http://") or image_url.startswith("https://")):
+        raise HTTPException(400, "image_url must be an http(s) URL or empty")
+    await db.settings.update_one(
+        {"key": "news_banner"},
+        {"$set": {
+            "key": "news_banner",
+            "image_url": image_url,
+            "caption": (req.caption or "").strip(),
+            "active": bool(req.active),
+        }},
+        upsert=True,
+    )
+    return {"ok": True, **(await _get_news_banner())}
+
+
 @api_router.get("/privacy.html", response_class=HTMLResponse)
 async def privacy_page_public():
     """Public HTML privacy policy — THIS is the URL to submit to Google Play / Apple App Store.

@@ -174,6 +174,14 @@ export default function AdminScreen() {
   const [plBusy, setPlBusy] = useState(false);
   const [plMsg, setPlMsg] = useState("");
 
+  // News Banner (single admin-managed banner shown on Home)
+  const [nbImage, setNbImage] = useState("");
+  const [nbCaption, setNbCaption] = useState("");
+  const [nbActive, setNbActive] = useState(true);
+  const [nbBusy, setNbBusy] = useState(false);
+  const [nbUploading, setNbUploading] = useState(false);
+  const [nbMsg, setNbMsg] = useState("");
+
   // Promo Coupons
   type Coupon = {
     id: string;
@@ -209,6 +217,73 @@ export default function AdminScreen() {
     } catch { setCoupons([]); }
   }, []);
   useEffect(() => { loadCoupons(); }, [loadCoupons]);
+
+  const loadBanner = useCallback(async () => {
+    try {
+      const r = await api<{ image_url: string; caption: string; active: boolean }>(
+        "/admin/news-banner",
+        { auth: true },
+      );
+      setNbImage(r.image_url || "");
+      setNbCaption(r.caption || "");
+      setNbActive(r.active !== false);
+    } catch {}
+  }, []);
+  useEffect(() => { loadBanner(); }, [loadBanner]);
+
+  const pickBannerImage = async () => {
+    setNbUploading(true); setNbMsg("");
+    try {
+      const r = await pickAndUploadImage();
+      if (r?.url) {
+        setNbImage(r.url);
+        setNbMsg("Image uploaded — tap Save to publish");
+      }
+    } catch (e: any) {
+      setNbMsg(e?.message ?? "Upload failed");
+    } finally {
+      setNbUploading(false);
+    }
+  };
+
+  const saveBanner = async () => {
+    setNbBusy(true); setNbMsg("");
+    try {
+      const r = await api<{ ok: boolean; image_url: string; caption: string; active: boolean }>(
+        "/admin/news-banner",
+        {
+          method: "PUT", auth: true,
+          body: { image_url: nbImage.trim(), caption: nbCaption.trim(), active: nbActive },
+        },
+      );
+      setNbImage(r.image_url);
+      setNbCaption(r.caption);
+      setNbActive(r.active);
+      setNbMsg("Saved!");
+      setTimeout(() => setNbMsg(""), 2500);
+    } catch (e: any) {
+      setNbMsg(e?.message ?? "Failed to save");
+    } finally {
+      setNbBusy(false);
+    }
+  };
+
+  const clearBanner = async () => {
+    setNbImage(""); setNbCaption("");
+    setNbBusy(true); setNbMsg("");
+    try {
+      await api("/admin/news-banner", {
+        method: "PUT", auth: true,
+        body: { image_url: "", caption: "", active: nbActive },
+      });
+      setNbMsg("Cleared");
+      setTimeout(() => setNbMsg(""), 2000);
+    } catch (e: any) {
+      setNbMsg(e?.message ?? "Failed to clear");
+    } finally {
+      setNbBusy(false);
+    }
+  };
 
   const createCoupon = async () => {
     const code = cpnCode.trim().toUpperCase();
@@ -849,6 +924,90 @@ export default function AdminScreen() {
               </View>
             ) : null}
           </View>
+
+          <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>News Banner</Text>
+          <View style={styles.card}>
+            <Text style={styles.hint}>
+              Upload a JPG/PNG banner (e.g., festive offer, new launch). It appears at the top of the Home products screen for all customers. Toggle it off to hide instantly.
+            </Text>
+            {nbImage ? (
+              <Image
+                source={nbImage}
+                style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: theme.radius.md, backgroundColor: theme.colors.surface }}
+                contentFit="cover"
+                testID="banner-preview"
+              />
+            ) : (
+              <View style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: theme.radius.md, borderWidth: 1, borderStyle: "dashed", borderColor: theme.colors.border, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surface }}>
+                <Feather name="image" size={32} color={theme.colors.mutedText} />
+                <Text style={[styles.hint, { marginTop: 6 }]}>No banner yet</Text>
+              </View>
+            )}
+            <Pressable
+              testID="nb-pick"
+              onPress={pickBannerImage}
+              disabled={nbUploading}
+              style={[styles.cta, { marginTop: theme.spacing.sm }]}
+            >
+              {nbUploading ? <ActivityIndicator color="#fff" /> : (
+                <Text style={styles.ctaText}>{nbImage ? "Replace Image" : "Pick & Upload Image"}</Text>
+              )}
+            </Pressable>
+
+            <Text style={styles.label}>Caption (optional)</Text>
+            <TextInput
+              testID="nb-caption"
+              value={nbCaption}
+              onChangeText={setNbCaption}
+              placeholder="Diwali sale — flat 15% off tulsi tea!"
+              placeholderTextColor={theme.colors.mutedText}
+              style={styles.input}
+              maxLength={120}
+            />
+
+            <Pressable
+              testID="nb-toggle"
+              onPress={() => setNbActive((v) => !v)}
+              style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 }}
+              hitSlop={6}
+            >
+              <Feather
+                name={nbActive ? "toggle-right" : "toggle-left"}
+                size={26}
+                color={nbActive ? theme.colors.brand : theme.colors.mutedText}
+              />
+              <Text style={{ color: theme.colors.onSurface, fontFamily: theme.font.text, fontSize: 14 }}>
+                {nbActive ? "Visible to customers" : "Hidden"}
+              </Text>
+            </Pressable>
+
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <Pressable
+                testID="nb-save"
+                onPress={saveBanner}
+                disabled={nbBusy}
+                style={[styles.cta, { flex: 1 }]}
+              >
+                {nbBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Save Banner</Text>}
+              </Pressable>
+              {nbImage ? (
+                <Pressable
+                  testID="nb-clear"
+                  onPress={clearBanner}
+                  disabled={nbBusy}
+                  style={[styles.cta, { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border }]}
+                >
+                  <Text style={[styles.ctaText, { color: theme.colors.error }]}>Clear</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {nbMsg ? (
+              <Text style={[styles.msg, nbMsg.toLowerCase().includes("saved") && { color: theme.colors.brand }]}>
+                {nbMsg}
+              </Text>
+            ) : null}
+          </View>
+
 
           <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>WhatsApp Order Alerts</Text>
           <View style={styles.card}>

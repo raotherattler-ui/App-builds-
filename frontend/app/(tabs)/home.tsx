@@ -26,6 +26,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [waLink, setWaLink] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ image_url: string; caption: string } | null>(null);
 
   const load = useCallback(async (selected: string) => {
     try {
@@ -48,6 +49,12 @@ export default function Home() {
   useFocusEffect(
     useCallback(() => {
       api<{ whatsapp_link: string }>("/support/info").then((r) => setWaLink(r.whatsapp_link)).catch(() => {});
+      api<{ image_url: string; caption: string; active: boolean }>("/news-banner")
+        .then((r) => {
+          if (r.active && r.image_url) setBanner({ image_url: r.image_url, caption: r.caption || "" });
+          else setBanner(null);
+        })
+        .catch(() => setBanner(null));
     }, []),
   );
 
@@ -64,6 +71,16 @@ export default function Home() {
           <Text style={styles.heroTitle}>Pure remedies,{"\n"}rooted in tradition.</Text>
         </View>
       </View>
+      {banner ? (
+        <View style={styles.newsBannerWrap} testID="news-banner">
+          <Image source={banner.image_url} style={styles.newsBannerImg} contentFit="cover" transition={200} />
+          {banner.caption ? (
+            <View style={styles.newsBannerCaption}>
+              <Text numberOfLines={2} style={styles.newsBannerText}>{banner.caption}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
       <View style={styles.chipsWrap}>
         <ScrollView
           horizontal
@@ -186,6 +203,20 @@ const makeStyles = (theme: Theme) => StyleSheet.create({
   },
   heroOverlay: { flex: 1, padding: theme.spacing.lg, justifyContent: "flex-end" },
   heroTitle: { color: "#fff", fontSize: 22, lineHeight: 26, fontFamily: theme.font.display },
+  newsBannerWrap: {
+    marginHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+    borderRadius: theme.radius.lg,
+    overflow: "hidden",
+    backgroundColor: theme.colors.surfaceSecondary,
+  },
+  newsBannerImg: { width: "100%", aspectRatio: 16 / 9 },
+  newsBannerCaption: {
+    position: "absolute", left: 0, right: 0, bottom: 0,
+    paddingVertical: 10, paddingHorizontal: 14,
+    backgroundColor: "rgba(43,46,42,0.72)",
+  },
+  newsBannerText: { color: "#fff", fontSize: 13, fontFamily: theme.font.text },
   chipsWrap: { height: 56, marginBottom: theme.spacing.sm },
   chipsContent: { paddingHorizontal: theme.spacing.lg, gap: theme.spacing.sm, alignItems: "center", height: 56 },
   chip: {

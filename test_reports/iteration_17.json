@@ -1,0 +1,25 @@
+{
+  "summary": "Backend-only test of the News Banner feature (GET /api/news-banner, GET/PUT /api/admin/news-banner). 13/13 pytest cases passed against the public URL. Covered: A default state with no doc set (public and admin both return {image_url:'', caption:'', active:true}), B auth gating (no auth -> 401/403, invalid token -> 401/403, non-admin -> 403 with the DB left unchanged, admin -> 200), C PUT/GET round-trip with exact values, D active=false hides image and caption from the public endpoint while the admin endpoint keeps the stored values, and toggling back on restores public visibility, E clearing both fields, F trimming whitespace from image_url and caption (checked in Mongo too). Each test snapshots the news_banner doc and restores it afterwards.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/admin/news-banner", "issue": "image_url is not validated. Non-http values such as 'javascript:alert(1)' are accepted and stored (200). The spec says image_url is an http URL; consider requiring an http(s) scheme or an empty string and returning 422 otherwise."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []},
+  "test_report_links": ["/app/backend/tests/test_avr_news_banner.py", "/app/test_reports/pytest/pytest_news_banner.xml"],
+  "action_items": [
+    "Optional: validate the image_url scheme (http/https or empty) in NewsBannerRequest."
+  ],
+  "critical_code_review_comments": [
+    "Implementation is clean: settings upsert, _id projected out, require_admin reused.",
+    "PUT with an empty body {} silently resets the banner to defaults, because every field has a default in NewsBannerRequest. This is acceptable for a full-replace PUT, but the admin UI must always send all fields."
+  ],
+  "updated_files": ["/app/backend/tests/test_avr_news_banner.py"],
+  "success_rate": {"backend": "100%", "frontend": "N/A (not requested)"},
+  "seed_data_creation": "Uses conftest seeded_admin (TEST_admin@example.com, is_admin=true) and seeded_user session fixtures, the same pattern as test_avr_privacy_contact.py. These are cleaned up after the run, and the news_banner doc is restored after each test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run with: cd /app/backend/tests && set -a && . /app/frontend/.env && set +a && pytest test_avr_news_banner.py -v. Admin auth uses a seeded Mongo session token (is_admin flag); a real Google login for rao.jaiprakash@gmail.com was not exercised.",
+  "rca_of_issue": ""
+}
