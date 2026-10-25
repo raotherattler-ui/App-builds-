@@ -234,7 +234,7 @@ export default function AdminScreen() {
   const pickBannerImage = async () => {
     setNbUploading(true); setNbMsg("");
     try {
-      const r = await pickAndUploadImage();
+      const r = await pickAndUploadImage("/api/upload", { keepOriginal: true });
       if (r?.url) {
         setNbImage(r.url);
         setNbMsg("Image uploaded — tap Save to publish");
@@ -928,7 +928,7 @@ export default function AdminScreen() {
           <Text style={[styles.section, { marginTop: theme.spacing.lg }]}>News Banner</Text>
           <View style={styles.card}>
             <Text style={styles.hint}>
-              Upload a JPG/PNG banner (e.g., festive offer, new launch). It appears at the top of the Home products screen for all customers. Toggle it off to hide instantly.
+              Upload a JPG/PNG or animated GIF banner (e.g., festive offer, new launch; GIF up to 15MB). It appears at the top of the Home products screen for all customers. Toggle it off to hide instantly.
             </Text>
             {nbImage ? (
               <Image

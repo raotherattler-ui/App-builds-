@@ -84,3 +84,6 @@ Endpoints:
 - Only buyers (order status paid/shipped/delivered) can review; up to 3 photos per review via `POST /api/upload/review`.
 - `GET /api/products/{id}/reviews?rating=N` returns reviews + per-star counts; UI has star filter chips,
   "Verified Buyer" badge, photo strip and full-screen viewer (`src/components/ReviewsSection.tsx`).
+
+## News Banner GIF support (Oct 2026)
+- Admin banner upload keeps original file (no recompression) so animated GIFs stay animated; GIF limit 15MB, others 8MB.

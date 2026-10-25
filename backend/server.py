@@ -1524,9 +1524,11 @@ async def _store_upload(user: dict, file: UploadFile) -> dict:
     content = await file.read()
     if not content:
         raise HTTPException(400, "Empty file")
-    if len(content) > 8 * 1024 * 1024:
-        raise HTTPException(413, "File too large (8MB max)")
     ctype = (file.content_type or "image/jpeg").lower()
+    if ctype == "image/gif" and len(content) > 15 * 1024 * 1024:
+        raise HTTPException(413, "GIF too large (15MB max)")
+    if ctype != "image/gif" and len(content) > 8 * 1024 * 1024:
+        raise HTTPException(413, "File too large (8MB max)")
     if not ctype.startswith("image/"):
         raise HTTPException(400, "Only image uploads are allowed")
     ext = _EXT_MAP.get(ctype, "bin")
